@@ -86,7 +86,7 @@ def upload_stt():
         return ""
     
 if __name__ == "__main__":
-    result = upload_stt(5)
+    result = upload_stt()
     if result:
         print(f"인식 결과: {result}")
     else:
