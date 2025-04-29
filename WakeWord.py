@@ -3,8 +3,11 @@ import time
 import numpy as np
 import pvporcupine
 import pyaudio
+import requests
 from scipy.signal import resample
 
+from commandHandler import handle_command
+from config import BASE_URL
 from RequestStt import upload_stt
 from RequestTts import text_to_voice
 from util import load_mic_index, suppress_alsa_errors
@@ -12,6 +15,22 @@ from util import load_mic_index, suppress_alsa_errors
 KEYWORD_PATH ="/home/pi/my_project/salgai_ko_raspberry-pi_v3_0_0.ppn"
 MODEL_PATH = "/home/pi/my_project/porcupine_params_ko.pv"
 
+def post_wake(user_id) :
+    url = f"{BASE_URL}/api/wake"
+    params = {"user_id": user_id}
+
+    try:
+        response = requests.post(url, params=params)
+
+        if response.status_code == 200:
+            return response.text
+        else:
+            print(f"서버 응답 실패: {response.status_code} - {response.text}")
+            return None
+    except Exception as e:
+        print(f"[에러] 요청 중 오류 발생: {e}")
+        return None    
+    
 def listen_for_wakeword():
     porcupine = None
     pa = None
@@ -50,7 +69,6 @@ def listen_for_wakeword():
             pcm_16000 = np.round(pcm_16000).astype(np.int16)
             
             if np.isnan(pcm_16000).any() or np.isinf(pcm_16000).any():
-                print("NaN or Inf 포함된 프레임 – 스킵")
                 continue
             
             result = porcupine.process(pcm_16000)
@@ -77,9 +95,19 @@ def listen_for_wakeword():
             print(f"stream 정리 중 오류: {e}")
 
         if detected:
-            time.sleep(3)  # 장치 해제 시간 약간 주기
+            time.sleep(1.5)  # 장치 해제 시간 약간 주기
             text_to_voice("네?")
-            return upload_stt()
+            success = upload_stt()
+            
+            if success:
+                print(f"STT : {success}")
+
+                if success:
+                    handle_command(success)
+                else:
+                    text_to_voice("말씀을 잘 못 들었어요.")
+            else:
+                text_to_voice("녹음에 실패했습니다.")
 
 def wakeWord_forever():
     while True:
