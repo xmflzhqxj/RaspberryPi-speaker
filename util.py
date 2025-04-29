@@ -305,6 +305,9 @@ BASE_URL = "http://3.34.179.85:8000"
 # 사용자 ID
 USER_ID = {user_id}
 
+WAV_PATH = "/home/pi/my_project/stt.wav"
+LLM_VOICE_PATH = "/home/pi/my_project/llm_answer.mp3"
+
 # 복약 리마인더 설정
 DOSAGE_TIME = {dosage_time}
 DOSAGE_COUNT = {dosage_count}
