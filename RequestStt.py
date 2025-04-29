@@ -48,7 +48,6 @@ def record_audio():
                     if silence_start is None:
                         silence_start = time.time()
                     elif time.time() - silence_start > SILENCE_DURATION:
-                        print("말이 멈췄다고 판단됨. 녹음 종료.")
                         break
                 else:
                     silence_start = None
