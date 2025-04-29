@@ -1,17 +1,16 @@
 import requests
 from pydub import AudioSegment
-from pydub.playback import play
 
+from config import BASE_URL
 from util import safe_play
 
-# TTS API 서버 주소
-TTS_API_URL = "http://3.34.179.85:8000/api/tts"
 
 # TTS 수행 함수
 def text_to_voice(text):
+    url = f"{BASE_URL}/api/tts"
     try:
         payload = {"text": text}
-        response = requests.post(TTS_API_URL, json=payload)
+        response = requests.post(url, json=payload)
 
         if response.status_code == 200:
             with open("/home/pi/my_project/tts.mp3", "wb") as f:
