@@ -123,7 +123,7 @@ def auto_save_speaker():
     speaker_hw = None
 
     for line in lines:
-        if line.lower().startswith('card ') and any(k in line for k in ['usb', 'speaker', 'audio', 'device']):
+        if line.lower().startswith('card ') and any(k in line.lower() for k in ['usb', 'speaker']) and 'hdmi' not in line.lower():
             parts = line.split(':')
             card_info = parts[0].strip()
             card_num = card_info.split()[1]
@@ -286,14 +286,15 @@ def listen_number(prompt_text, default_value=0):
                 number = parse_korean_number(stt_result)
                 if number is not None:
                     return number
-
+        text_to_voice("입력되었습니다.")
+        
         # 실패한 경우
         retry_count += 1
         print(f"음성 인식 실패. 재시도 {retry_count}회")
         text_to_voice("다시 말씀해주세요.")
 
     # 3회 모두 실패 → 기본값
-    print("3회 실패. 기본값으로 설정합니다.")
+    text_to_voice("3회 실패. 기본값으로 설정합니다.")
     return default_value
 
 CONFIG_PATH = "/home/pi/my_project/config.py" 
