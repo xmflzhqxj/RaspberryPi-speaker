@@ -245,56 +245,59 @@ korean_number_map = {
 }
 
 def parse_korean_number(text):
-    text = text.replace(" ", "")  # 공백 제거
-    text = text.replace('"', '')  # 따옴표 제거
-    text = text.replace('번', '')  # "번" 제거
-    text = text.replace('입니다', '')  # "입니다" 제거 (추가 안정성)
-
-    if text in korean_number_map:
-        return korean_number_map[text]
-    elif "십" in text:
-        # 예: 십오 (15), 이십삼 (23)
-        parts = text.split("십")
-        left = korean_number_map.get(parts[0], 1)  # "십"만 있으면 10으로 간주
-        right = korean_number_map.get(parts[1], 0) if len(parts) > 1 else 0
-        return left * 10 + right
-    else:
-        return None
+    text = text.replace(" ", "").replace('"', '').replace('번', '').replace('입니다', '')
     
-def listen_number(prompt_text, default_value=0):
+    if text in korean_number_map:
+        return korean_number_map[text], text  # 숫자와 원래 한글 동시 반환
+    elif "십" in text:
+        parts = text.split("십")
+        left = korean_number_map.get(parts[0], 1)
+        right = korean_number_map.get(parts[1], 0) if len(parts) > 1 else 0
+        return left * 10 + right, text
+    else:
+        return None, None
+    
+def listen_number(word, default_value=0, time_count = ""):
     from RequestStt import upload_stt
     from RequestTts import text_to_voice
 
     retry_count = 0
+    text_to_voice(f"{word}를 말씀해주세요.")
     while retry_count < 3:
-        text_to_voice(prompt_text)
         stt_result = upload_stt()
 
         if stt_result:
             stt_result = stt_result.strip()
 
             # "기본값"이라고 말하면 바로 기본값 사용
-            if "기본" in stt_result:
-                print("사용자가 기본값을 요청했습니다.")
+            if "기본" in stt_result: 
+                text_to_voice("사용자가 기본값을 요청했습니다.")
                 return default_value
 
             # 숫자 추출
             numbers = re.findall(r'\d+', stt_result)
+
             if numbers:
-                return int(numbers[0])
+                value =  int(numbers[0])
+                unit = '분' if time_count == 'time' else '번' if time_count == 'count' else ''
+                text_to_voice(f"{word} {value}{unit} 입니다.")
+                return value
+            
             else:
-                number = parse_korean_number(stt_result)
-                if number is not None:
-                    return number
-        text_to_voice("입력되었습니다.")
+                value = parse_korean_number(stt_result)
+                if value[0] is not None:
+                    num_value, original_text = value
+                    unit = '분' if time_count == 'time' else '번' if time_count == 'count' else ''
+                    text_to_voice(f"{word} {original_text}{unit} 입니다.")
+                    return num_value
+        
         
         # 실패한 경우
         retry_count += 1
-        print(f"음성 인식 실패. 재시도 {retry_count}회")
         text_to_voice("다시 말씀해주세요.")
 
     # 3회 모두 실패 → 기본값
-    text_to_voice("3회 실패. 기본값으로 설정합니다.")
+    text_to_voice(f"3회 실패. {word} {default_value}입니다.")
     return default_value
 
 CONFIG_PATH = "/home/pi/my_project/config.py" 
@@ -318,16 +321,14 @@ DUMMY_ID = -1
 """
     with open(CONFIG_PATH, "w") as f:
         f.write(content)
-    print("config.py 저장 완료!")
-
 
 def initialize_settings():
     print("▶ 초기 설정을 음성으로 입력해주세요:")
 
-    user_id = listen_number("사용자 ID를 말씀해주세요.", default_value=1)
-    dosage_time = listen_number("복약 실패 후 재알림 간격을 몇 분으로 할지 말씀해주세요.", default_value=5)
-    dosage_count = listen_number("복약 실패 최대 재시도 횟수를 말씀해주세요.", default_value=3)
-    meal_time = listen_number("복약 전 식사 체크 시간을 몇 분으로 할지 말씀해주세요.", default_value=10)
-    induce_time = listen_number("복약 유도 시간을 몇 분으로 할지 말씀해주세요.", default_value=5)
+    user_id = listen_number(word = "사용자 ID", default_value=1,time_count = "count")
+    dosage_time = listen_number(word = "복약 실패 후 재알림 간격", default_value=5, time_count = "time")
+    dosage_count = listen_number(word = "복약 실패 최대 재시도 횟수", default_value=3, time_count = "count")
+    meal_time = listen_number(word = "복약 전 식사 체크 시간", default_value=10, time_count = "time")
+    induce_time = listen_number(word = "복약 유도 시간", default_value=5, time_count = "time")
 
     save_config(user_id, dosage_time, dosage_count, meal_time, induce_time)
