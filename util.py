@@ -256,48 +256,55 @@ def parse_korean_number(text):
         return left * 10 + right, text
     else:
         return None, None
-    
+
+time_unit_map = {
+    "초": 1 / 60,
+    "분": 1,
+    "시간": 60
+}
+
+
 def listen_number(word, default_value=0, time_count = ""):
     from RequestStt import upload_stt
     from RequestTts import text_to_voice
 
     retry_count = 0
-    text_to_voice(f"{word}를 말씀해주세요.")
+    unit = '분' if time_count == 'time' else '번' if time_count == 'count' else ''
+    text_to_voice(f"{word}{unit}를 말씀해주세요.")
+
     while retry_count < 3:
         stt_result = upload_stt()
-
         if stt_result:
             stt_result = stt_result.strip()
 
-            # "기본값"이라고 말하면 바로 기본값 사용
-            if "기본" in stt_result: 
-                text_to_voice("사용자가 기본값을 요청했습니다.")
+            if "기본" in stt_result:
+                text_to_voice("기본값을 사용합니다.")
                 return default_value
 
-            # 숫자 추출
+            multiplier = 1
+            for t_unit, mul in time_unit_map.items():
+                if t_unit in stt_result and time_count == "time":
+                    multiplier = mul
+                    break
+
             numbers = re.findall(r'\d+', stt_result)
-
             if numbers:
-                value =  int(numbers[0])
-                unit = '분' if time_count == 'time' else '번' if time_count == 'count' else ''
-                text_to_voice(f"{word} {value}{unit} 입니다.")
-                return value
-            
-            else:
-                value = parse_korean_number(stt_result)
-                if value[0] is not None:
-                    num_value, original_text = value
-                    unit = '분' if time_count == 'time' else '번' if time_count == 'count' else ''
-                    text_to_voice(f"{word} {original_text}{unit} 입니다.")
-                    return num_value
-        
-        
-        # 실패한 경우
-        retry_count += 1
-        text_to_voice("다시 말씀해주세요.")
+                value = int(numbers[0])
+                converted = round(value * multiplier)
+                text_to_voice(f"{word} {converted}{unit} 입니다.")
+                return converted
 
-    # 3회 모두 실패 → 기본값
-    text_to_voice(f"3회 실패. {word} {default_value}입니다.")
+            value = parse_korean_number(stt_result)
+            if value[0] is not None:
+                num_value, original_text = value
+                converted = round(num_value * multiplier)
+                text_to_voice(f"{word} {converted}{unit} 입니다.")
+                return converted
+
+        retry_count += 1
+        text_to_voice("잘 이해하지 못했어요. 다시 말씀해주세요.")
+
+    text_to_voice(f"3회 실패. {word} {default_value}{unit}로 설정합니다.")
     return default_value
 
 CONFIG_PATH = "/home/pi/my_project/config.py" 

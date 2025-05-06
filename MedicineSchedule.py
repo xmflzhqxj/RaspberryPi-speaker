@@ -17,12 +17,13 @@ from config import (
     MEAL_TIME,
     USER_ID,
 )
+from global_state import pending_alerts
 from llmTts import conversation_and_check, post_taking_medicine
 from RequestStt import upload_stt
 from RequestTts import text_to_voice
 
 scheduled_times_set = set()
-pending_alerts = deque()
+
 ALARM_TOLERANCE_MINUTES = 2
 
 def get_user_name(user_id):
@@ -46,6 +47,8 @@ def medicine_alert(sched_dt: datetime, dosage_mg, schedule_id):
         "dosage_mg": dosage_mg,
         "retry_count": 0,
         "sched_dt": sched_dt,
+        "wait_for_confirmation" : False,
+        "confirmation_started_at" : 0,
         "steps": deque([
             {"offset": -MEAL_TIME, "responsetype": "check_meal", "message": f"{USER_NAME}님 약 드시기 {MEAL_TIME}분 전입니다. 약 드시기 전에 식사 하셨나요?"},
             {"offset": -INDUCE_TIME, "responsetype": "induce_medicine", "message": f"{USER_NAME}님 요 며칠 약 챙겨드시기 어려우셨죠?"},
@@ -76,53 +79,25 @@ def process_immediate_alert():
             alert["steps"].popleft()
             try:
                 if step["responsetype"] == "taking_medicine_time":
-                    taking_medicine = post_taking_medicine(schedule_id, USER_ID)
+                    alert["wait_for_confirmation"] = True
+                    alert["confirmation_started_at"] = datetime.now()
+
                 elif step["responsetype"] == "check_medicine":
                     # 사용자 녹음 -> 복약 여부 판단 -> 기록 전송
-                    success = upload_stt()
-                    if success:
-                        result = conversation_and_check(
-                            responsetype="check_medicine",
-                            schedule_id=schedule_id,
-                            user_id=USER_ID
-                        )
-                        if result:
-                            taken_at = datetime.now().strftime("%y.%m.%d.%H.%M")
-                            payload = {"schedule_id": schedule_id, "taken_at": taken_at}
-                            try:
-                                res = requests.put(f"{BASE_URL}/api/user/histories", json=payload)
-                                if res.status_code == 200:
-                                    print("복약 기록 전송 성공")
-                                    pending_alerts.remove(alert)
-                                else:
-                                    print(f"전송 실패: {res.status_code} - {res.text}")
-                            except Exception as e:
-                                print(f"전송 에러: {e}")
-                        else:
-                            alert["retry_count"] += 1
-                            if alert["retry_count"] > DOSAGE_COUNT:
-                                pending_alerts.remove(alert)
-                            else:
-                                next_retry = {
-                                "offset": DOSAGE_TIME,
-                                "responsetype": "check_medicine",
-                                "message": f"{USER_NAME}님 약 드셨나요?"
-                                }
-                                alert["steps"].appendleft(next_retry)
-                    else:
-                        print("STT 업로드 실패")
-                        text_to_voice("음성 인식에 실패했습니다. 다시 말씀해 주세요.")
+                    handle_medicine_confirmation(alert)
+                    
                 else:
                     text_to_voice(step["message"])
                     success = upload_stt()
                     if success:
-                        result = conversation_and_check(
+                        conversation_and_check(
                             responsetype=step["responsetype"],
                             schedule_id=schedule_id,
                             user_id=USER_ID
                         )
                     else:
                         text_to_voice("음성 인식에 실패했습니다. 다시 한번 말씀해 주세요.")
+
             except Exception as e:
                 print(f"스텝 처리 중 오류: {e}")
 
@@ -220,6 +195,65 @@ def get_today_schedule_summary():
         time_str = sched_time.strftime("%p %I시 %M분").replace("AM", "오전").replace("PM", "오후")
         summary += f" {time_str}에 {r['dosage_mg']}밀리그램,"
     return summary.strip(" ,")
+
+
+def handle_medicine_confirmation(alert):
+    success = upload_stt()
+    
+    if not success:
+        text_to_voice("음성 인식이 되지 않았어요. 다시 시도해 주세요.")
+        return
+    
+    if success:
+        result = conversation_and_check(
+            responsetype="check_medicine",
+            schedule_id=alert["schedule_id"],
+            user_id=USER_ID
+        )
+        if result:
+            taken_at = datetime.now().isoformat()
+            payload = {"schedule_id": alert["schedule_id"], "taken_at": taken_at}
+            try:
+                res = requests.put(f"{BASE_URL}/api/user/histories", json=payload)
+                if res.status_code == 200:
+                    print("복약 기록 전송 성공")
+                    pending_alerts.remove(alert)
+                else:
+                    print(f"전송 실패: {res.status_code} - {res.text}")
+            except Exception as e:
+                print(f"전송 에러: {e}")
+        else:
+            alert["retry_count"] += 1
+            if alert["retry_count"] > DOSAGE_COUNT:
+                pending_alerts.remove(alert)
+            else:
+                next_retry = {
+                    "offset": DOSAGE_TIME,
+                    "responsetype": "check_medicine",
+                    "message": f"{USER_NAME}님 약 드셨나요?"
+                }
+                alert["steps"].appendleft(next_retry)
+    else:
+        text_to_voice("음성 인식에 실패했습니다. 다시 말씀해 주세요.")
+
+    alert["wait_for_confirmation"] = False
+
+def check_medicine(alert, user_response: str = None):
+    
+    if not user_response:
+        user_response = upload_stt()
+    
+    if user_response:
+        if any(phrase in user_response for phrase in ["먹었어", "복용", "먹었습니다", "먹었어요"]):
+            print("복약 확인: 유효한 복약 응답 감지됨")
+            handle_medicine_confirmation(alert)
+        else:
+            print(f"복약 응답 인식 실패: {user_response}")
+            text_to_voice("복약 여부를 이해하지 못했어요. 다시 말씀해 주세요.")
+    else:
+        print("STT 실패 또는 음성 없음")
+        text_to_voice("복약 여부를 이해하지 못했어요. 다시 말씀해 주세요.")
+
 
 if __name__ == "__main__":
     run_scheduler()

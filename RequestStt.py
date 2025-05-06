@@ -9,14 +9,14 @@ import requests
 from config import BASE_URL, WAV_PATH
 from util import load_hw_device, suppress_alsa_errors
 
-SILENCE_THRESHOLD = 100 # 말을 안할 때 진폭
-SILENCE_DURATION = 3  # 말 멈추고 3초 뒤 종료
+SILENCE_THRESHOLD = 200
+SILENCE_DURATION = 3
+RECORD_MIN_DURATION = 2  # 최소 녹음 시간 (초)
 CHUNK_SIZE = 1024
 RATE = 44100
 CHANNELS = 1
 
 def record_audio():
-    
     try:
         print("음성 녹음중...")
 
@@ -32,6 +32,7 @@ def record_audio():
 
         frames = []
         silence_start = None
+        start_time = time.time()
 
         with suppress_alsa_errors():
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
@@ -47,7 +48,7 @@ def record_audio():
                 if rms < SILENCE_THRESHOLD:
                     if silence_start is None:
                         silence_start = time.time()
-                    elif time.time() - silence_start > SILENCE_DURATION:
+                    elif time.time() - silence_start > SILENCE_DURATION and time.time() - start_time > RECORD_MIN_DURATION:
                         break
                 else:
                     silence_start = None
@@ -55,45 +56,40 @@ def record_audio():
             process.terminate()
             process.wait()
 
-        if not frames:
-            print("녹음 데이터가 없습니다.")
-            return False
-
+        # 저장
         with wave.open(WAV_PATH, 'wb') as wf:
             wf.setnchannels(CHANNELS)
             wf.setsampwidth(2)
             wf.setframerate(RATE)
             wf.writeframes(b''.join(frames))
 
+        if os.path.getsize(WAV_PATH) < 2048:
+            print(f"녹음 파일이 너무 작습니다: {WAV_PATH}")
+            return False
+
         return True
 
     except Exception as e:
         print(f"녹음 실패: {e}")
         return False
-    
+
+
 def upload_stt():
     url = f"{BASE_URL}/api/stt"
-    
+
     if record_audio():
-        if os.path.exists(WAV_PATH):
-            try:
-                with open(WAV_PATH, "rb") as f:
-                    response = requests.post(url, files={"audio": f})
-                    if response.status_code == 200:
-                        return response.text.strip()
-                    else:
-                        print(f"STT 서버 응답 실패: {response.status_code}")
-                        return ""
-            except Exception as e:
-                print(f"STT 서버 요청 실패: {e}")
-                return ""
-        else:
-            print("녹음 파일 없음")
-            return ""
-    else:
-        print("녹음 실패")
-        return ""
-    
+        try:
+            with open(WAV_PATH, "rb") as f:
+                response = requests.post(url, files={"audio": f})
+                if response.status_code == 200:
+                    return response.text.strip()
+                else:
+                    print(f"STT 서버 응답 실패: {response.status_code}")
+        except Exception as e:
+            print(f"STT 서버 요청 실패: {e}")
+    return ""
+
+
 if __name__ == "__main__":
     result = upload_stt()
     if result:
