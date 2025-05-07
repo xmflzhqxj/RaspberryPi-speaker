@@ -28,7 +28,7 @@ def safe_play(audio_segment):
     audio_segment.export(temp_path, format="wav")
 
     try:
-        result = subprocess.run(["aplay", "-D", speaker_device, temp_path], capture_output=True, text=True)
+        subprocess.run(["aplay", "-D", speaker_device, temp_path], check=True)
     except Exception as e:
         print(f"에러 {e}")
 
@@ -38,6 +38,7 @@ TAKEN_PATTERNS = [
     r"복용(했|했어요|했습니다)",
     r"\b(응|네)\b",
 ]
+
 
 @contextlib.contextmanager
 def suppress_alsa_errors():
