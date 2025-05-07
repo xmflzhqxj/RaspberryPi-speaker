@@ -2,8 +2,7 @@ import threading
 import time
 
 from commandHandler import handle_command
-from global_state import pending_alerts
-from MedicineSchedule import run_scheduler,check_medicine
+from MedicineSchedule import run_scheduler
 from RequestTts import text_to_voice
 from util import (
     auto_save_mic,
@@ -35,14 +34,7 @@ if __name__ == "__main__":
     while True:
         recognized_text = wakeWord_forever()
         if recognized_text:
-            handled = False
-            for alert in list(pending_alerts):
-                if alert.get("wait_for_confirmation"):
-                    check_medicine(alert)
-                    handled = True
-                    break
-            if not handled:
-                handle_command(recognized_text)
+            handle_command(recognized_text)
         time.sleep(0.5)
 
             
