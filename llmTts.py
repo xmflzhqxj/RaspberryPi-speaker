@@ -62,12 +62,12 @@ def conversation_and_check(responsetype="", schedule_id=None, user_id=None):
 
 def post_taking_medicine(schedule_id, user_id):
     url = f"{BASE_URL}/api/test2"
-
-    if not os.path.exists(WAV_PATH) or os.path.getsize(WAV_PATH) < 1000:
-        print(f"고정 음성파일이 존재하지 않거나 너무 작습니다: {WAV_PATH}")
+    dummy_path = "/home/pi/my_project/test.wav"
+    if not os.path.exists(dummy_path) or os.path.getsize(dummy_path) < 1000:
+        print(f"고정 음성파일이 존재하지 않거나 너무 작습니다: {dummy_path}")
         return False
 
-    files = {"audio": open(WAV_PATH, "rb")}
+    files = {"audio": open(dummy_path, "rb")}
     params = {
         "userId": user_id,
         "scheduleId": schedule_id,
@@ -89,7 +89,7 @@ def post_taking_medicine(schedule_id, user_id):
                         f.write(audio_data.content)
 
                     if os.path.exists(LLM_VOICE_PATH):
-                        subprocess.run(["mpg123", LLM_VOICE_PATH], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        subprocess.run(["mpg123", LLM_VOICE_PATH])
                     else:
                         print("taking_medicine_time 음성 파일이 존재하지 않습니다.")
                 else:
