@@ -1,7 +1,3 @@
-import re
-
-from RequestTts import text_to_voice
-
 # 기존 명령어 매칭용 패턴
 command_patterns = [
     {
