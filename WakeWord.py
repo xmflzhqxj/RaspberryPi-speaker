@@ -6,13 +6,16 @@ import pyaudio
 import requests
 from scipy.signal import resample
 
-from commandHandler import handle_command
-from config import BASE_URL
+from config import BASE_URL, USER_ID
+from global_state import pending_alerts
+from gpio_controller import GPIOController
+from llmTts import conversation_and_check
+from MedicineSchedule import handle_command, handle_medicine_confirmation
 from RequestStt import upload_stt
 from RequestTts import text_to_voice
 from util import load_mic_index, suppress_alsa_errors
-from global_state import pending_alerts
-from MedicineSchedule import check_medicine
+
+gpio = GPIOController(refresh_callback=lambda: None)
 
 KEYWORD_PATH ="/home/pi/my_project/salgai_ko_raspberry-pi_v3_0_0.ppn"
 MODEL_PATH = "/home/pi/my_project/porcupine_params_ko.pv"
@@ -28,9 +31,11 @@ def post_wake(user_id) :
             return response.text
         else:
             print(f"서버 응답 실패: {response.status_code} - {response.text}")
+            gpio.set_mode("error")
             return None
     except Exception as e:
-        print(f"[에러] 요청 중 오류 발생: {e}")
+        print(f"요청 중 오류 발생: {e}")
+        gpio.set_mode("error")
         return None    
     
 def listen_for_wakeword():
@@ -38,7 +43,9 @@ def listen_for_wakeword():
     pa = None
     stream = None
     detected = False
-
+    
+    gpio.set_mode("default")
+    
     try:
         with suppress_alsa_errors():
             porcupine = pvporcupine.create(
@@ -50,6 +57,7 @@ def listen_for_wakeword():
             mic_index = load_mic_index()
             if mic_index is None:
                 print("저장된 마이크 인덱스를 찾을 수 없습니다.")
+                gpio.set_mode("error")
                 return
 
             pa = pyaudio.PyAudio()
@@ -76,11 +84,13 @@ def listen_for_wakeword():
 
             if result >= 0:
                 print("wakeword 살가이가 감지되었습니다.")
+                gpio.set_mode("wakeword")
                 detected = True
                 break
 
     except Exception as e:
         print(f"초기화 에러:{e}")
+        gpio.set_mode("error")
 
     finally:
         try:
@@ -94,6 +104,7 @@ def listen_for_wakeword():
                 porcupine.delete()
         except Exception as e:
             print(f"stream 정리 중 오류: {e}")
+            gpio.set_mode("error")
 
         if detected:
             time.sleep(1.5)
@@ -101,15 +112,28 @@ def listen_for_wakeword():
 
             for alert in list(pending_alerts):
                 if alert.get("wait_for_confirmation"):
-                    check_medicine(alert)
-                    return  # 복약 확인만 하고 종료
+                    result = conversation_and_check(
+                        responsetype="check_medicine",
+                        schedule_id=alert["schedule_id"],
+                        user_id=USER_ID
+                    )
+                    if result:
+                        handle_medicine_confirmation(alert)
+                        
+                    return  
 
             success = upload_stt()
             if success:
-                print(f"STT : {success}")
-                handle_command(success)
+                response = handle_command(success)
+                text_to_voice(response)  
+                return success
+               
             else:
                 text_to_voice("녹음에 실패했습니다.")
+                gpio.set_mode("error")
+                return None
+
+
 
 def wakeWord_forever():
     while True:
@@ -117,6 +141,7 @@ def wakeWord_forever():
         if result_text:
             return result_text
         print("\n'살가이' 감지 실패, 재시도 중...")
+        gpio.set_mode("error")
         time.sleep(1)
 
 if __name__ == "__main__":

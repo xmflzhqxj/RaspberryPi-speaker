@@ -340,3 +340,4 @@ def initialize_settings():
     induce_time = listen_number(word = "복약 유도 시간", default_value=5, time_count = "time")
 
     save_config(user_id, dosage_time, dosage_count, meal_time, induce_time)
+    
