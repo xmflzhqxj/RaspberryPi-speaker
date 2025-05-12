@@ -9,8 +9,8 @@ from scipy.signal import resample
 from config import BASE_URL, USER_ID
 from global_state import pending_alerts
 from gpio_controller import GPIOController
-from llmTts import conversation_and_check
-from MedicineSchedule import handle_command, handle_medicine_confirmation
+from llmTts import conversation_and_check,post_intent
+from MedicineSchedule import handle_medicine_confirmation
 from RequestStt import upload_stt
 from RequestTts import text_to_voice
 from util import load_mic_index, suppress_alsa_errors
@@ -37,6 +37,24 @@ def post_wake(user_id) :
         print(f"요청 중 오류 발생: {e}")
         gpio.set_mode("error")
         return None    
+    
+def post_wakeword():
+    url = f"{BASE_URL}/api/wake"
+    params = {"user_id": USER_ID}
+
+    try:
+        response = requests.post(url, params=params)
+        if response.status_code == 200:
+            print("서버에 wake 메시지 전송 완료")
+            return True
+        else:
+            print(f"서버 응답 실패: {response.status_code} - {response.text}")
+            gpio.set_mode("error")
+            return False
+    except Exception as e:
+        print(f" POST 요청 중 오류 발생: {e}")
+        gpio.set_mode("error")
+        return False
     
 def listen_for_wakeword():
     porcupine = None
@@ -84,6 +102,8 @@ def listen_for_wakeword():
 
             if result >= 0:
                 print("wakeword 살가이가 감지되었습니다.")
+                post_wakeword()
+                
                 gpio.set_mode("wakeword")
                 detected = True
                 break
@@ -124,7 +144,7 @@ def listen_for_wakeword():
 
             success = upload_stt()
             if success:
-                response = handle_command(success)
+                response = post_intent(user_id=USER_ID)
                 text_to_voice(response)  
                 return success
                
