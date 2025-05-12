@@ -37,6 +37,7 @@ def send_audio_and_get_response(audio_path, url, params, expect_text=True, play_
             return text if expect_text else True
         else:
             print(f"LLM 응답 실패: {response.status_code} - {response.text}")
+            gpio.set_mode("error")
     except Exception as e:
         print(f"LLM 요청 예외: {e}")
         gpio.set_mode("error")
@@ -70,3 +71,15 @@ def post_taking_medicine(schedule_id, user_id):
         "scheduleId": schedule_id,
         "responsetype": "taking_medicine_time"
     }, expect_text=False)
+
+# 사용자의 음성 명령 의도를 판단하는 함수
+def post_intent(user_id):
+    url = f"{BASE_URL}/api/FEtest"
+
+    text = send_audio_and_get_response(WAV_PATH, url, {
+        "userId": user_id,
+        "scheduleId": DUMMY_ID,
+        "responsetype": "intent"
+    }, expect_text=True)
+
+    return text  
