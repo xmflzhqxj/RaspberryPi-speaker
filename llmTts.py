@@ -3,7 +3,7 @@ import subprocess
 
 import requests
 
-from config import BASE_URL, DUMMY_ID, LLM_VOICE_PATH, WAV_PATH
+from config import BASE_URL, DUMMY_ID, LLM_VOICE_PATH, WAV_PATH,DUMMY_PATH
 from gpio_controller import GPIOController
 
 gpio = GPIOController(refresh_callback=lambda: None)
@@ -18,13 +18,15 @@ def send_audio_and_get_response(audio_path, url, params, expect_text=True, play_
     files = {"audio": open(audio_path, "rb")}
     try:
         response = requests.post(url, files=files, params=params)
+       
         if response.status_code == 200:
             result = response.json()
             text = result.get("message", "")
+            with open("requirements.txt", "w") as f:
+                f.write(text.strip() + "\n")  
             audio_url = result.get("file_url", "")
-
-            print(text)
             
+            print(f"llm : {text}")
             if play_audio and audio_url:
                 audio_data = requests.get(audio_url)
                 if audio_data.status_code == 200:
@@ -65,8 +67,8 @@ def conversation_and_check(responsetype="", schedule_id=None, user_id=None):
 # 복약 시간 알림 
 def post_taking_medicine(schedule_id, user_id):
     url = f"{BASE_URL}/api/test2"
-    dummy_path = "/home/pi/my_project/test.wav"
-    return send_audio_and_get_response(dummy_path, url, {
+
+    return send_audio_and_get_response(DUMMY_PATH, url, {
         "userId": user_id,
         "scheduleId": schedule_id,
         "responsetype": "taking_medicine_time"
@@ -75,11 +77,9 @@ def post_taking_medicine(schedule_id, user_id):
 # 사용자의 음성 명령 의도를 판단하는 함수
 def post_intent(user_id):
     url = f"{BASE_URL}/api/FEtest"
-
-    text = send_audio_and_get_response(WAV_PATH, url, {
+    return send_audio_and_get_response(WAV_PATH, url, {
         "userId": user_id,
         "scheduleId": DUMMY_ID,
         "responsetype": "intent"
     }, expect_text=True)
-
-    return text  
+    
