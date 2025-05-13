@@ -30,7 +30,7 @@ atexit.register(gpio.cleanup)
 
 scheduled_times_set = set()
 ALARM_TOLERANCE_MINUTES = 2
-MAX_CONFIRMATION_WAIT = DOSAGE_TIME  # 복약 응답 유효시간 (분)
+MAX_CONFIRMATION_WAIT = DOSAGE_TIME 
 
 def get_user_name(user_id):
     try:
@@ -88,12 +88,11 @@ def process_immediate_alert():
                     post_taking_medicine(DUMMY_ID, USER_ID)
                     alert["wait_for_confirmation"] = True
                     alert["confirmation_started_at"] = datetime.now()
-                    return
-
-                gpio.set_mode("default")
-                text_to_voice(step["message"])
+                    return  
+                
                 print(step["message"])
-
+                text_to_voice(step["message"])
+                
                 user_response = upload_stt()
 
                 if user_response:
@@ -212,9 +211,6 @@ def on_button_press():
                 handle_medicine_confirmation(alert)  
                 return
 
-
-
-
 def run_scheduler():
     schedule_list = get_today_schedule()
     if schedule_list:
@@ -238,7 +234,7 @@ def handle_medicine_confirmation(alert):
     try:
         res = requests.put(f"{BASE_URL}/api/user/histories", json=payload)
         if res.status_code == 200:
-            print("복약 기록 전송 성공")
+            text_to_voice("복약 기록 전송 성공")
             pending_alerts.remove(alert)
         else:
             print(f"전송 실패: {res.status_code} - {res.text}")
