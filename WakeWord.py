@@ -5,11 +5,12 @@ import pvporcupine
 import pyaudio
 import requests
 from scipy.signal import resample
+from datetime import datetime
 
-from config import BASE_URL, USER_ID
+from config import BASE_URL,DOSAGE_TIME,USER_ID
 from global_state import pending_alerts
 from gpio_controller import GPIOController
-from llmTts import conversation_and_check,post_intent
+from llmTts import post_intent,conversation_and_check
 from MedicineSchedule import handle_medicine_confirmation
 from RequestStt import upload_stt
 from RequestTts import text_to_voice
@@ -19,6 +20,8 @@ gpio = GPIOController(refresh_callback=lambda: None)
 
 KEYWORD_PATH ="/home/pi/my_project/salgai_ko_raspberry-pi_v3_0_0.ppn"
 MODEL_PATH = "/home/pi/my_project/porcupine_params_ko.pv"
+MAX_CONFIRMATION_WAIT = DOSAGE_TIME 
+FE_USER_ID = 2
 
 def post_wake(user_id) :
     url = f"{BASE_URL}/api/wake"
@@ -40,10 +43,11 @@ def post_wake(user_id) :
     
 def post_wakeword():
     url = f"{BASE_URL}/api/wake"
-    params = {"user_id": USER_ID}
+    params = {"user_id": FE_USER_ID}
 
     try:
         response = requests.post(url, params=params)
+        
         if response.status_code == 200:
             print("서버에 wake 메시지 전송 완료")
             return True
@@ -121,7 +125,8 @@ def listen_for_wakeword():
             if pa:
                 pa.terminate()
             if porcupine:
-                porcupine.delete()
+                porcupine.delete()  
+
         except Exception as e:
             print(f"stream 정리 중 오류: {e}")
             gpio.set_mode("error")
@@ -130,24 +135,28 @@ def listen_for_wakeword():
             time.sleep(1.5)
             text_to_voice("네?")
 
-            for alert in list(pending_alerts):
-                if alert.get("wait_for_confirmation"):
-                    result = conversation_and_check(
-                        responsetype="check_medicine",
-                        schedule_id=alert["schedule_id"],
-                        user_id=USER_ID
-                    )
-                    if result:
-                        handle_medicine_confirmation(alert)
-                        
-                    return  
+            user_text = upload_stt()
 
-            success = upload_stt()
-            if success:
-                response = post_intent(user_id=USER_ID)
-                text_to_voice(response)  
-                return success
-               
+            if user_text:
+                has_confirmation_alert = False
+                for alert in list(pending_alerts):
+                    if alert.get("wait_for_confirmation"):
+                        elapsed = (datetime.now() - alert["confirmation_started_at"]).total_seconds() / 60
+                        if elapsed <= MAX_CONFIRMATION_WAIT:
+                            has_confirmation_alert = True
+                            is_taken = conversation_and_check(
+                                responsetype="check_medicine",
+                                schedule_id=alert["schedule_id"],
+                                user_id=USER_ID
+                            )
+                            if is_taken:
+                                handle_medicine_confirmation(alert)
+                            
+                                return user_text
+
+                if not has_confirmation_alert:
+                    response = post_intent(user_id=FE_USER_ID)
+
             else:
                 text_to_voice("녹음에 실패했습니다.")
                 gpio.set_mode("error")
