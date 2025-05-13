@@ -1,42 +1,62 @@
 import os
 import subprocess
-
+import time
 import requests
 
 from config import BASE_URL, DUMMY_ID, LLM_VOICE_PATH, WAV_PATH,DUMMY_PATH
 from gpio_controller import GPIOController
+from global_state import mic_lock
+from util import load_speaker_device
 
 gpio = GPIOController(refresh_callback=lambda: None)
 
 # 공통 LLM 응답 처리 함수
 def send_audio_and_get_response(audio_path, url, params, expect_text=True, play_audio=True):
+    result = {}
+
     if not os.path.exists(audio_path) or os.path.getsize(audio_path) < 1000:
         print(f"오디오 파일이 존재하지 않거나 너무 작습니다: {audio_path}")
         gpio.set_mode("error")
-        return "" if expect_text else False
+        return {} if expect_text else False
 
     files = {"audio": open(audio_path, "rb")}
     try:
         response = requests.post(url, files=files, params=params)
-       
+
         if response.status_code == 200:
             result = response.json()
             text = result.get("message", "")
             with open("requirements.txt", "w") as f:
-                f.write(text.strip() + "\n")  
+                f.write(text.strip() + "\n")
+
             audio_url = result.get("file_url", "")
-            
+
             print(f"llm : {text}")
             if play_audio and audio_url:
                 audio_data = requests.get(audio_url)
                 if audio_data.status_code == 200:
                     with open(LLM_VOICE_PATH, "wb") as f:
                         f.write(audio_data.content)
-                    subprocess.run(["mpg123", LLM_VOICE_PATH], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+                    #마이크와 스피커 자원 충돌 방지 - llm tts 작동용
+                    wait_count = 0
+                    while mic_lock.locked() and wait_count < 10:
+                        time.sleep(0.5)
+                        wait_count += 1
+
+                    speaker_device = load_speaker_device()
+                    proc = subprocess.run(
+                        ["mpg123", "-o", "alsa", "-a", speaker_device, LLM_VOICE_PATH],
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE
+                    )
+                    if proc.returncode != 0:
+                        print(f"재생 실패: return code {proc.returncode}")
+                        print(f"stderr: {proc.stderr.decode()}")
+                        gpio.set_mode("error")
                 else:
                     print(f"음성 다운로드 실패: {audio_data.status_code}")
                     gpio.set_mode("error")
-            return text if expect_text else True
         else:
             print(f"LLM 응답 실패: {response.status_code} - {response.text}")
             gpio.set_mode("error")
@@ -46,23 +66,24 @@ def send_audio_and_get_response(audio_path, url, params, expect_text=True, play_
     finally:
         files["audio"].close()
 
-    return "" if expect_text else False
+    return result if expect_text else bool(result)
 
 # 일반 대화 또는 복약 체크
 def conversation_and_check(responsetype="", schedule_id=None, user_id=None):
     url = f"{BASE_URL}/api/test2"
     real_schedule_id = schedule_id if responsetype == "check_medicine" else DUMMY_ID
-    
-    text = send_audio_and_get_response(WAV_PATH, url, {
+
+    result = send_audio_and_get_response(WAV_PATH, url, {
         "userId": user_id,
         "scheduleId": real_schedule_id,
         "responsetype": responsetype
     }, expect_text=True)
 
     if responsetype == "check_medicine":
-        taken_keywords = ["복용", "먹었", "약 먹", "다 먹", "드셨"]
-        return any(keyword in text for keyword in taken_keywords)
-    return text
+        return result.get("medicine_success", False) # 복용 성공 여부 받아오기
+
+    return result.get("message", "")
+
 
 # 복약 시간 알림 
 def post_taking_medicine(schedule_id, user_id):
