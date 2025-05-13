@@ -33,7 +33,7 @@ if __name__ == "__main__":
     scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
     scheduler_thread.start()
 
-    #text_to_voice("안녕하세요. 저는 살가이라고 합니다. 살가이라고 불러주세요.")
+    # text_to_voice("안녕하세요. 저는 살가이라고 합니다. 살가이라고 불러주세요.")
 
     while True:
         gpio.set_mode("default")  # 기본 대기 상태 (파란 LED)
