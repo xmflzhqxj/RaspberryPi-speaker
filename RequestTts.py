@@ -3,7 +3,8 @@ from pydub import AudioSegment
 
 from config import BASE_URL
 from util import safe_play
-
+from gpio_controller import GPIOController
+gpio = GPIOController(refresh_callback=lambda: None)
 
 # TTS 수행 함수
 def text_to_voice(text):
@@ -21,6 +22,7 @@ def text_to_voice(text):
             print(f"상태코드: {response.status_code}, 메시지: {response.text}")
 
     except Exception as e:
+        gpio.set_mode("error")
         print(f"예외 {e}")
 
 # 테스트 실행
