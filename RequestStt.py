@@ -12,8 +12,8 @@ from util import load_hw_device
 
 gpio = GPIOController(refresh_callback=lambda: None)
 
-SILENCE_THRESHOLD = 300
-SILENCE_DURATION = 3
+SILENCE_THRESHOLD = 1600  
+SILENCE_DURATION = 1.5
 CHUNK_SIZE = 1024
 RATE = 44100
 CHANNELS = 1
@@ -22,7 +22,10 @@ def record_audio():
     try:
         print("음성 녹음중...")
 
-        device = load_hw_device()
+        device = load_hw_device()       
+        if not device.startswith("plughw:"):
+            device = device.replace("hw:", "plughw:")
+
         cmd = [
             "arecord",
             "-D", device,
@@ -34,6 +37,8 @@ def record_audio():
 
         frames = []
         silence_start = None
+        start_time = time.time()
+        max_recording_time = 20
 
        
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
@@ -45,6 +50,7 @@ def record_audio():
 
             frames.append(data)
             rms = audioop.rms(data, 2)
+            print(f"RMS: {rms}")  # while 루프 안에서
 
             if rms < SILENCE_THRESHOLD:
                 if silence_start is None:
@@ -54,8 +60,17 @@ def record_audio():
             else:
                 silence_start = None
 
-        process.terminate()
-        process.wait()
+            if time.time() - start_time > max_recording_time:
+                print("녹음 최대 시간 초과로 종료")
+                break
+            
+        process.kill()        
+        try:
+            while process.stdout.read(CHUNK_SIZE):  # stdout 비우기
+                pass
+        except Exception:
+            pass
+        process.wait()          
 
         with wave.open(WAV_PATH, 'wb') as wf:
             wf.setnchannels(CHANNELS)
