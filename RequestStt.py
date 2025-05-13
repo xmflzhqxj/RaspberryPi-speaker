@@ -9,7 +9,7 @@ import requests
 from config import BASE_URL, WAV_PATH
 from gpio_controller import GPIOController
 from util import load_hw_device
-
+from global_state import mic_lock
 gpio = GPIOController(refresh_callback=lambda: None)
 
 SILENCE_THRESHOLD = 1600  
@@ -19,71 +19,71 @@ RATE = 44100
 CHANNELS = 1
 
 def record_audio():
-    try:
-        print("음성 녹음중...")
-
-        device = load_hw_device()       
-        if not device.startswith("plughw:"):
-            device = device.replace("hw:", "plughw:")
-
-        cmd = [
-            "arecord",
-            "-D", device,
-            "-f", "S16_LE",
-            "-r", str(RATE),
-            "-c", str(CHANNELS),
-            "-t", "raw"
-        ]
-
-        frames = []
-        silence_start = None
-        start_time = time.time()
-        max_recording_time = 20
-
-       
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
-
-        while True:
-            data = process.stdout.read(CHUNK_SIZE)
-            if not data:
-                break
-
-            frames.append(data)
-            rms = audioop.rms(data, 2)
-            print(f"RMS: {rms}")  # while 루프 안에서
-
-            if rms < SILENCE_THRESHOLD:
-                if silence_start is None:
-                    silence_start = time.time()
-                elif time.time() - silence_start > SILENCE_DURATION:
-                    break
-            else:
-                silence_start = None
-
-            if time.time() - start_time > max_recording_time:
-                print("녹음 최대 시간 초과로 종료")
-                break
-            
-        process.kill()        
+    with mic_lock:
         try:
-            while process.stdout.read(CHUNK_SIZE):  # stdout 비우기
+            print("음성 녹음중...")
+
+            device = load_hw_device()       
+            if not device.startswith("plughw:"):
+                device = device.replace("hw:", "plughw:")
+
+            cmd = [
+                "arecord",
+                "-D", device,
+                "-f", "S16_LE",
+                "-r", str(RATE),
+                "-c", str(CHANNELS),
+                "-t", "raw"
+            ]
+
+            frames = []
+            silence_start = None
+            start_time = time.time()
+            max_recording_time = 20
+
+        
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+
+            while True:
+                data = process.stdout.read(CHUNK_SIZE)
+                if not data:
+                    break
+
+                frames.append(data)
+                rms = audioop.rms(data, 2)
+
+                if rms < SILENCE_THRESHOLD:
+                    if silence_start is None:
+                        silence_start = time.time()
+                    elif time.time() - silence_start > SILENCE_DURATION:
+                        break
+                else:
+                    silence_start = None
+
+                if time.time() - start_time > max_recording_time:
+                    print("녹음 최대 시간 초과로 종료")
+                    break
+                
+            process.kill()        
+            try:
+                while process.stdout.read(CHUNK_SIZE):  # stdout 비우기
+                    pass
+            except Exception:
                 pass
-        except Exception:
-            pass
-        process.wait()          
+            process.wait()          
 
-        with wave.open(WAV_PATH, 'wb') as wf:
-            wf.setnchannels(CHANNELS)
-            wf.setsampwidth(2)
-            wf.setframerate(RATE)
-            wf.writeframes(b''.join(frames))
+            with wave.open(WAV_PATH, 'wb') as wf:
+                wf.setnchannels(CHANNELS)
+                wf.setsampwidth(2)
+                wf.setframerate(RATE)
+                wf.writeframes(b''.join(frames))
 
-        return True
+            return True
 
-    except Exception as e:
-        print(f"녹음 실패: {e}")
-        gpio.set_mode("error")
-        return False
+        except Exception as e:
+            print(f"녹음 실패: {e}")
+            gpio.set_mode("error")
+            return False
 
 def upload_stt():
     url = f"{BASE_URL}/api/stt"
