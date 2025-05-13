@@ -1,6 +1,5 @@
 import threading
 import time
-from datetime import datetime
 
 try:
     import RPi.GPIO as GPIO
