@@ -93,6 +93,7 @@ def process_immediate_alert():
                 print(step["message"])
                 text_to_voice(step["message"])
                 
+                time.sleep(1)
                 user_response = upload_stt()
 
                 if user_response:
