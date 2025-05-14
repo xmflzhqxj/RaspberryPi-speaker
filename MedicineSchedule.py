@@ -17,6 +17,7 @@ from config import (
     INDUCE_TIME,
     MEAL_TIME,
     USER_ID,
+    FE_USER_ID
 )
 from global_state import pending_alerts
 from gpio_controller import GPIOController
@@ -29,7 +30,7 @@ gpio = GPIOController(refresh_callback=lambda: on_button_press())
 atexit.register(gpio.cleanup)
 
 scheduled_times_set = set()
-ALARM_TOLERANCE_MINUTES = 2
+ALARM_TOLERANCE_MINUTES = 1
 MAX_CONFIRMATION_WAIT = DOSAGE_TIME 
 
 def get_user_name(user_id):
@@ -85,7 +86,7 @@ def process_immediate_alert():
             try:
                 if step["responsetype"] == "taking_medicine_time":
                     gpio.set_mode("default")
-                    post_taking_medicine(DUMMY_ID, USER_ID)
+                    post_taking_medicine(DUMMY_ID, FE_USER_ID)
                     alert["wait_for_confirmation"] = True
                     alert["confirmation_started_at"] = datetime.now()
                     return  
@@ -93,14 +94,13 @@ def process_immediate_alert():
                 print(step["message"])
                 text_to_voice(step["message"])
                 
-                time.sleep(1)
                 user_response = upload_stt()
 
                 if user_response:
                     result = conversation_and_check(
                         responsetype=step["responsetype"],
                         schedule_id=alert["schedule_id"],
-                        user_id=USER_ID
+                        user_id=FE_USER_ID
                     )
                     if step["responsetype"] == "check_medicine":
                         if result:
@@ -193,7 +193,7 @@ def refresh_schedules_now():
     schedule_list = get_today_schedule()
     
     if schedule_list:
-        print("오늘 복약 스케줄 (새로고침)!")
+        print("오늘 복약 스케줄 !")
         for r in sorted(schedule_list, key=lambda r: r["scheduled_time"]):
             sched_time = parser.isoparse(r["scheduled_time"])
             print(f"  - {sched_time.strftime('%H:%M')} | {r['dosage_mg']}mg")
@@ -274,6 +274,28 @@ def handle_command(text):
             elif cmd["responsetype"] == "today_schedule":
                 return get_today_schedule_summary()  
 
+# from WakeWord import wakeWord_once
+
+# def wakeword_medicine_check(alert):
+#     max_wait = MAX_CONFIRMATION_WAIT * 60  # seconds
+#     start_time = time.time()
+
+#     while mic_lock.locked():
+#         print("마이크 점유 중 → wakeword 대기")
+#         time.sleep(0.5)
+
+#     while time.time() - start_time < max_wait:
+#         result_text = wakeWord_once() # 이때만 wake word 켜기
+#         if result_text:
+#             is_taken = conversation_and_check(
+#                 responsetype="check_medicine",
+#                 schedule_id=alert["schedule_id"],
+#                 user_id=USER_ID
+#             )
+#             if is_taken:
+#                 handle_medicine_confirmation(alert)
+#                 break
+#         time.sleep(1)
 
 if __name__ == "__main__":
     if wait_for_microphone():
