@@ -41,7 +41,6 @@ def record_audio():
             start_time = time.time()
             max_recording_time = 20
 
-        
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
 
             while True:
@@ -72,6 +71,11 @@ def record_audio():
                 pass
             process.wait()          
 
+            if not frames:
+                print("녹음된 데이터가 없습니다.")
+                gpio.set_mode("error")
+                return False
+            
             with wave.open(WAV_PATH, 'wb') as wf:
                 wf.setnchannels(CHANNELS)
                 wf.setsampwidth(2)
