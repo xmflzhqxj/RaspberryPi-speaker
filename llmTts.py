@@ -22,7 +22,7 @@ def send_audio_and_get_response(audio_path, url, params, expect_text=True, play_
     files = {"audio": open(audio_path, "rb")}
     try:
         response = requests.post(url, files=files, params=params)
-
+        
         if response.status_code == 200:
             result = response.json()
             text = result.get("message", "")
@@ -31,7 +31,6 @@ def send_audio_and_get_response(audio_path, url, params, expect_text=True, play_
 
             audio_url = result.get("file_url", "")
 
-            print(f"llm : {text}")
             if play_audio and audio_url:
                 audio_data = requests.get(audio_url)
                 if audio_data.status_code == 200:
@@ -43,7 +42,8 @@ def send_audio_and_get_response(audio_path, url, params, expect_text=True, play_
                     while mic_lock.locked() and wait_count < 10:
                         time.sleep(0.5)
                         wait_count += 1
-
+                        
+                    print(f"LLM : {text}")
                     speaker_device = load_speaker_device()
                     proc = subprocess.run(
                         ["mpg123", "-o", "alsa", "-a", speaker_device, LLM_VOICE_PATH],
@@ -70,7 +70,7 @@ def send_audio_and_get_response(audio_path, url, params, expect_text=True, play_
 
 # 일반 대화 또는 복약 체크
 def conversation_and_check(responsetype="", schedule_id=None, user_id=None):
-    url = f"{BASE_URL}/api/test2"
+    url = f"{BASE_URL}/api/FEtest"
     real_schedule_id = schedule_id if responsetype == "check_medicine" else DUMMY_ID
 
     result = send_audio_and_get_response(WAV_PATH, url, {
@@ -80,14 +80,14 @@ def conversation_and_check(responsetype="", schedule_id=None, user_id=None):
     }, expect_text=True)
 
     if responsetype == "check_medicine":
-        return result.get("medicine_success", False) # 복용 성공 여부 받아오기
+        return result.get("success", None) # 복용 성공 여부 받아오기
 
     return result.get("message", "")
 
 
 # 복약 시간 알림 
 def post_taking_medicine(schedule_id, user_id):
-    url = f"{BASE_URL}/api/test2"
+    url = f"{BASE_URL}/api/FEtest"
 
     return send_audio_and_get_response(DUMMY_PATH, url, {
         "userId": user_id,
