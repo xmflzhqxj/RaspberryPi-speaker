@@ -5,41 +5,19 @@ import pvporcupine
 import pyaudio
 import requests
 from scipy.signal import resample
-from datetime import datetime
 
-from config import BASE_URL,DOSAGE_TIME,USER_ID
-from global_state import pending_alerts,mic_lock
+from config import BASE_URL,DOSAGE_TIME,FE_USER_ID
 from gpio_controller import GPIOController
-from llmTts import conversation_and_check
-from MedicineSchedule import handle_medicine_confirmation
+from llmTts import post_intent
 from RequestStt import upload_stt
 from RequestTts import text_to_voice
 from util import load_mic_index, suppress_alsa_errors
-
+from global_state import mic_lock
 gpio = GPIOController(refresh_callback=lambda: None)
 
 KEYWORD_PATH ="/home/pi/my_project/salgai_ko_raspberry-pi_v3_0_0.ppn"
 MODEL_PATH = "/home/pi/my_project/porcupine_params_ko.pv"
 MAX_CONFIRMATION_WAIT = DOSAGE_TIME 
-FE_USER_ID = 2
-
-def post_wake(user_id) :
-    url = f"{BASE_URL}/api/wake"
-    params = {"user_id": user_id}
-
-    try:
-        response = requests.post(url, params=params)
-
-        if response.status_code == 200:
-            return response.text
-        else:
-            print(f"서버 응답 실패: {response.status_code} - {response.text}")
-            gpio.set_mode("error")
-            return None
-    except Exception as e:
-        print(f"요청 중 오류 발생: {e}")
-        gpio.set_mode("error")
-        return None    
     
 def post_wakeword():
     url = f"{BASE_URL}/api/wake"
@@ -73,6 +51,8 @@ def listen_for_wakeword():
                 model_path=MODEL_PATH
             )
 
+            print(f"Using keyword: {KEYWORD_PATH}, model: {MODEL_PATH}")
+
             mic_index = load_mic_index()
             if mic_index is None:
                 print("저장된 마이크 인덱스를 찾을 수 없습니다.")
@@ -99,12 +79,12 @@ def listen_for_wakeword():
                     pcm_44100 = np.frombuffer(data, dtype=np.int16)
                     pcm_16000 = resample(pcm_44100, porcupine.frame_length)
                     pcm_16000 = np.round(pcm_16000).astype(np.int16)
-
+                    
                     if np.isnan(pcm_16000).any() or np.isinf(pcm_16000).any():
                         continue
 
                     result = porcupine.process(pcm_16000)
-
+                   
                     if result >= 0:
                         print("wakeword 살가이가 감지되었습니다.")
                         post_wakeword()
@@ -119,19 +99,11 @@ def listen_for_wakeword():
                         time.sleep(1.5)
                         text_to_voice("네?")
                         user_text = upload_stt()
+                        
                         if user_text:
-                            for alert in list(pending_alerts):
-                                if alert.get("wait_for_confirmation"):
-                                    elapsed = (datetime.now() - alert["confirmation_started_at"]).total_seconds() / 60
-                                    if elapsed <= MAX_CONFIRMATION_WAIT:
-                                        is_taken = conversation_and_check(
-                                            responsetype="check_medicine",
-                                            schedule_id=alert["schedule_id"],
-                                            user_id=USER_ID
-                                        )
-                                        if is_taken:
-                                            handle_medicine_confirmation(alert)
+                            post_intent(FE_USER_ID)
                         return user_text
+                    
                 except Exception as e:
                     print(f"wakeword 오류 {e}")
                     gpio.set_mode("error")
@@ -163,6 +135,17 @@ def wakeWord_forever():
         print("\n'살가이' 감지 실패, 재시도 중...")
         gpio.set_mode("error")
         time.sleep(1)
+
+# def wakeWord_once():
+#     # 복약 루틴 확인 시 사용
+#     try:
+#         result_text = listen_for_wakeword()
+#         return result_text
+#     except Exception as e:
+#         print(f"살가이 감지 실패: {e}")
+#         gpio.set_mode("error")
+#         return None
+
 
 if __name__ == "__main__":
     wakeWord_forever()
