@@ -37,21 +37,28 @@ if __name__ == "__main__":
 
     while True:
         try:
-            gpio.set_mode("default")
             recognized_text = wakeWord_forever()
 
             if recognized_text:
                 try:
+                    gpio.set_mode("thinking")  
                     handle_command(recognized_text)
+                    gpio.set_mode("default")  
                 except Exception as e:
                     print(f"명령 처리 중 오류 발생: {e}")
                     gpio.set_mode("error") 
                     time.sleep(2)
+                    gpio.set_mode("default") 
+            else:
+                gpio.set_mode("default") 
+
         except Exception as e:
             print(f"웨이크워드 감지 오류: {e}")
             gpio.set_mode("error")
             time.sleep(2)
+            gpio.set_mode("default")  
 
         time.sleep(0.5)
+
 
             
