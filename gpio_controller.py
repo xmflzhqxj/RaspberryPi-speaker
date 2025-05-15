@@ -71,6 +71,8 @@ class GPIOController:
             GPIO.output(GREEN_LED, GPIO.LOW)
         elif mode == "wakeword":
             GPIO.output(BLUE_LED, GPIO.HIGH)
+        elif mode == "llmtts":
+            GPIO.output(BLUE_LED, GPIO.HIGH)
         elif mode == "error":
             GPIO.output(RED_LED, GPIO.HIGH)
         elif mode == "thinking" :

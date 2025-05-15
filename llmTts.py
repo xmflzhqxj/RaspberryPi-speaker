@@ -17,6 +17,8 @@ def send_audio_and_get_response(audio_path, url, params, expect_text=True, play_
     if not os.path.exists(audio_path) or os.path.getsize(audio_path) < 1000:
         print(f"오디오 파일이 존재하지 않거나 너무 작습니다: {audio_path}")
         gpio.set_mode("error")
+        time.sleep(2)
+        gpio.set_mode("default")
         return {} if expect_text else False
 
     files = {"audio": open(audio_path, "rb")}
@@ -37,14 +39,14 @@ def send_audio_and_get_response(audio_path, url, params, expect_text=True, play_
                     with open(LLM_VOICE_PATH, "wb") as f:
                         f.write(audio_data.content)
 
-                    #마이크와 스피커 자원 충돌 방지 - llm tts 작동용
                     wait_count = 0
                     while mic_lock.locked() and wait_count < 10:
                         time.sleep(0.5)
                         wait_count += 1
-                        
+
                     print(f"LLM : {text}")
-                    gpio.set_mode("wakeword")
+                    gpio.set_mode("llmtts")
+
                     speaker_device = load_speaker_device()
                     proc = subprocess.run(
                         ["mpg123", "-o", "alsa", "-a", speaker_device, LLM_VOICE_PATH],
@@ -55,15 +57,24 @@ def send_audio_and_get_response(audio_path, url, params, expect_text=True, play_
                         print(f"재생 실패: return code {proc.returncode}")
                         print(f"stderr: {proc.stderr.decode()}")
                         gpio.set_mode("error")
+                        time.sleep(2)
+                    else:
+                        gpio.set_mode("default")  
                 else:
                     print(f"음성 다운로드 실패: {audio_data.status_code}")
                     gpio.set_mode("error")
+                    time.sleep(2)
+            else:
+                gpio.set_mode("default")  
         else:
             print(f"LLM 응답 실패: {response.status_code} - {response.text}")
             gpio.set_mode("error")
+            time.sleep(2)
+
     except Exception as e:
         print(f"LLM 요청 예외: {e}")
         gpio.set_mode("error")
+        time.sleep(2)
     finally:
         files["audio"].close()
 
