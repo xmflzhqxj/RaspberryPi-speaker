@@ -66,10 +66,14 @@ class GPIOController:
         GPIO.output(BLUE_LED, GPIO.LOW)
         GPIO.output(GREEN_LED, GPIO.LOW)
         if mode == "default":
-            GPIO.output(BLUE_LED, GPIO.HIGH)
+            GPIO.output(BLUE_LED, GPIO.LOW)
+            GPIO.output(RED_LED, GPIO.LOW)
+            GPIO.output(GREEN_LED, GPIO.LOW)
         elif mode == "wakeword":
-            GPIO.output(RED_LED, GPIO.HIGH)
+            GPIO.output(BLUE_LED, GPIO.HIGH)
         elif mode == "error":
+            GPIO.output(RED_LED, GPIO.HIGH)
+        elif mode == "thinking" :
             GPIO.output(GREEN_LED, GPIO.HIGH)
 
     def cleanup(self):
