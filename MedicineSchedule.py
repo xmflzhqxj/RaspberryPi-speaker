@@ -85,7 +85,6 @@ def process_immediate_alert():
             alert["steps"].popleft()
             try:
                 if step["responsetype"] == "taking_medicine_time":
-                    gpio.set_mode("default")
                     post_taking_medicine(DUMMY_ID, FE_USER_ID)
                     alert["wait_for_confirmation"] = True
                     alert["confirmation_started_at"] = datetime.now()

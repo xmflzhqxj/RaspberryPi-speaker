@@ -44,6 +44,7 @@ def send_audio_and_get_response(audio_path, url, params, expect_text=True, play_
                         wait_count += 1
                         
                     print(f"LLM : {text}")
+                    gpio.set_mode("wakeword")
                     speaker_device = load_speaker_device()
                     proc = subprocess.run(
                         ["mpg123", "-o", "alsa", "-a", speaker_device, LLM_VOICE_PATH],
@@ -70,6 +71,7 @@ def send_audio_and_get_response(audio_path, url, params, expect_text=True, play_
 
 # 일반 대화 또는 복약 체크
 def conversation_and_check(responsetype="", schedule_id=None, user_id=None):
+    gpio.set_mode("thinking")
     url = f"{BASE_URL}/api/FEtest"
     real_schedule_id = schedule_id if responsetype == "check_medicine" else DUMMY_ID
 
@@ -87,8 +89,8 @@ def conversation_and_check(responsetype="", schedule_id=None, user_id=None):
 
 # 복약 시간 알림 
 def post_taking_medicine(schedule_id, user_id):
+    gpio.set_mode("thinking")
     url = f"{BASE_URL}/api/FEtest"
-
     return send_audio_and_get_response(DUMMY_PATH, url, {
         "userId": user_id,
         "scheduleId": schedule_id,
@@ -97,6 +99,7 @@ def post_taking_medicine(schedule_id, user_id):
 
 # 사용자의 음성 명령 의도를 판단하는 함수
 def post_intent(user_id):
+    gpio.set_mode("thinking")
     url = f"{BASE_URL}/api/FEtest"
     return send_audio_and_get_response(WAV_PATH, url, {
         "userId": user_id,

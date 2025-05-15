@@ -36,9 +36,8 @@ if __name__ == "__main__":
     # text_to_voice("안녕하세요. 저는 살가이라고 합니다. 살가이라고 불러주세요.")
 
     while True:
-        gpio.set_mode("default")  # 기본 대기 상태 (파란 LED)
-
         try:
+            gpio.set_mode("default")
             recognized_text = wakeWord_forever()
 
             if recognized_text:
@@ -48,12 +47,10 @@ if __name__ == "__main__":
                     print(f"명령 처리 중 오류 발생: {e}")
                     gpio.set_mode("error") 
                     time.sleep(2)
-                    gpio.set_mode("default")
         except Exception as e:
             print(f"웨이크워드 감지 오류: {e}")
             gpio.set_mode("error")
             time.sleep(2)
-            gpio.set_mode("default")
 
         time.sleep(0.5)
 

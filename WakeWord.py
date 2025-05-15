@@ -51,8 +51,6 @@ def listen_for_wakeword():
                 model_path=MODEL_PATH
             )
 
-            print(f"Using keyword: {KEYWORD_PATH}, model: {MODEL_PATH}")
-
             mic_index = load_mic_index()
             if mic_index is None:
                 print("저장된 마이크 인덱스를 찾을 수 없습니다.")
@@ -74,7 +72,7 @@ def listen_for_wakeword():
                                      channels=1, rate=44100, input=True,
                                      input_device_index=mic_index,
                                      frames_per_buffer=input_frame_length)
-                    
+        
                     data = stream.read(input_frame_length, exception_on_overflow=False)
                     pcm_44100 = np.frombuffer(data, dtype=np.int16)
                     pcm_16000 = resample(pcm_44100, porcupine.frame_length)

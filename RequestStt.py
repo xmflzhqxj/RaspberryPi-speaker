@@ -13,7 +13,7 @@ from global_state import mic_lock
 gpio = GPIOController(refresh_callback=lambda: None)
 
 SILENCE_THRESHOLD = 1600  
-SILENCE_DURATION = 1.5
+SILENCE_DURATION = 3
 CHUNK_SIZE = 1024
 RATE = 44100
 CHANNELS = 1
