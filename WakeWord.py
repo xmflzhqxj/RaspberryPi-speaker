@@ -1,4 +1,5 @@
 import time
+
 import numpy as np
 import pvporcupine
 import pyaudio
@@ -6,12 +7,12 @@ import requests
 from scipy.signal import resample
 
 from config import BASE_URL, DOSAGE_TIME, FE_USER_ID
+from global_state import mic_lock
 from gpio_controller import GPIOController
 from llmTts import post_intent
 from RequestStt import upload_stt
 from RequestTts import text_to_voice
 from util import load_mic_index, suppress_alsa_errors
-from global_state import mic_lock
 
 gpio = GPIOController(refresh_callback=lambda: None)
 
@@ -93,16 +94,21 @@ def listen_for_wakeword():
                         post_wakeword()
                         gpio.set_mode("wakeword")
 
-                        stream.stop_stream()
-                        stream.close()
-                        pa.terminate()
-                        porcupine.delete()
+                        if stream:
+                            stream.stop_stream()
+                            stream.close()
+                            stream = None
+                        if pa:
+                            pa.terminate()
+                            pa = None
+                        if porcupine:
+                            porcupine.delete()
+                            porcupine = None
                         mic_lock.release()
 
                         time.sleep(1.5)
                         
                         text_to_voice("네?")
-
                         user_text = upload_stt()
 
                         if user_text:
@@ -112,16 +118,18 @@ def listen_for_wakeword():
                         return user_text
 
                 except Exception as e:
-                    print(f"wakeword 오류 {e}")
+                    print(f"wakeword 오류: {e}")
                     gpio.set_mode("error")
                     time.sleep(2)
                     gpio.set_mode("default")  
+
                 finally:
                     try:
-                        if stream and stream.is_active():
-                            stream.stop_stream()
                         if stream:
+                            if stream.is_active():
+                                stream.stop_stream()
                             stream.close()
+                            stream = None
                         mic_lock.release()
                     except:
                         pass
@@ -133,10 +141,24 @@ def listen_for_wakeword():
         gpio.set_mode("default")
 
     finally:
-        if porcupine:
-            porcupine.delete()
+        if stream:
+            try:
+                if stream.is_active():
+                    stream.stop_stream()
+                stream.close()
+            except:
+                pass
         if pa:
-            pa.terminate()
+            try:
+                pa.terminate()
+            except:
+                pass
+        if porcupine:
+            try:
+                porcupine.delete()
+            except:
+                pass
+
 
 
 def wakeWord_forever():
