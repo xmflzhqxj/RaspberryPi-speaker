@@ -7,9 +7,10 @@ import wave
 import requests
 
 from config import BASE_URL, WAV_PATH
+from global_state import mic_lock
 from gpio_controller import GPIOController
 from util import load_hw_device
-from global_state import mic_lock
+
 gpio = GPIOController(refresh_callback=lambda: None)
 
 SILENCE_THRESHOLD = 1600  

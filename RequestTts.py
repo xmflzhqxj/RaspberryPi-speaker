@@ -2,8 +2,9 @@ import requests
 from pydub import AudioSegment
 
 from config import BASE_URL
-from util import safe_play
 from gpio_controller import GPIOController
+from util import safe_play
+
 gpio = GPIOController(refresh_callback=lambda: None)
 
 # TTS 수행 함수

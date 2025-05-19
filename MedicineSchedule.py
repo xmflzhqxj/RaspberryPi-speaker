@@ -14,10 +14,10 @@ from config import (
     DOSAGE_COUNT,
     DOSAGE_TIME,
     DUMMY_ID,
+    FE_USER_ID,
     INDUCE_TIME,
     MEAL_TIME,
     USER_ID,
-    FE_USER_ID
 )
 from global_state import pending_alerts
 from gpio_controller import GPIOController
