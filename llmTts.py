@@ -1,11 +1,12 @@
 import os
 import subprocess
 import time
+
 import requests
 
-from config import BASE_URL, DUMMY_ID, LLM_VOICE_PATH, WAV_PATH,DUMMY_PATH
-from gpio_controller import GPIOController
+from config import BASE_URL, DUMMY_ID, DUMMY_PATH, LLM_VOICE_PATH, WAV_PATH
 from global_state import mic_lock
+from gpio_controller import GPIOController
 from util import load_speaker_device
 
 gpio = GPIOController(refresh_callback=lambda: None)
