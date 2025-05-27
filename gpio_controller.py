@@ -1,3 +1,4 @@
+import os
 import threading
 import time
 
@@ -23,12 +24,14 @@ except (ImportError, RuntimeError):
 RED_LED = 17
 BLUE_LED = 27
 GREEN_LED = 22
-SWITCH = 23
+SCEDULE_SWITCH = 23
+RESET_SWITCH = 24
 
 class GPIOController:
     def __init__(self, refresh_callback):
         self.refresh_callback = refresh_callback
         self.initialized = False
+        self.last_reset_time = 0  
         self.initialized = self._setup_gpio() 
         if self.initialized:
             self._start_switch_monitor()
@@ -39,7 +42,8 @@ class GPIOController:
             GPIO.setup(RED_LED, GPIO.OUT)
             GPIO.setup(BLUE_LED, GPIO.OUT)
             GPIO.setup(GREEN_LED, GPIO.OUT)
-            GPIO.setup(SWITCH, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+            GPIO.setup(SCEDULE_SWITCH, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+            GPIO.setup(RESET_SWITCH, GPIO.IN, pull_up_down=GPIO.PUD_UP)
             self.set_mode("default")
             return True
         except Exception as e:
@@ -50,11 +54,21 @@ class GPIOController:
         def monitor():
             while True:
                 try:
-                    if GPIO.input(SWITCH) == GPIO.LOW:
+                    if GPIO.input(SCEDULE_SWITCH) == GPIO.LOW:
                         self.refresh_callback()
                         time.sleep(1)
+
+                    if GPIO.input(RESET_SWITCH) == GPIO.LOW:
+                        now = time.time()
+                        if now - self.last_reset_time > 5:
+                            self.last_reset_time = now
+                            restart_program() 
+
                 except Exception as e:
                     print(f"스위치 모니터링 오류: {e}")
+                    self.set_mode("error")
+                    time.sleep(1) 
+
                 time.sleep(0.1)
 
         threading.Thread(target=monitor, daemon=True).start()
@@ -81,3 +95,11 @@ class GPIOController:
     def cleanup(self):
         if self.initialized:
             GPIO.cleanup()
+
+def restart_program():
+    print("main 재시작합니다...")
+    os.execv("/home/pi/my_project/env/bin/python", [
+        "/home/pi/my_project/env/bin/python",
+        "/home/pi/my_project/main.py"
+    ])
+    
