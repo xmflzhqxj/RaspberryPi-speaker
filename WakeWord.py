@@ -8,6 +8,7 @@ from scipy.signal import resample
 
 from config import BASE_URL, DOSAGE_TIME, FE_USER_ID
 from global_state import mic_lock
+import global_state
 from gpio_controller import GPIOController
 from llmTts import post_intent
 from RequestStt import upload_stt
@@ -44,7 +45,8 @@ def listen_for_wakeword():
     porcupine = None
     pa = None
     stream = None
-
+    global wakeword_detection
+    
     try:
         with suppress_alsa_errors():
             porcupine = pvporcupine.create(
@@ -91,6 +93,7 @@ def listen_for_wakeword():
 
                     if result >= 0:
                         print("wakeword 살가이가 감지되었습니다.")
+                        global_state.wakeword_detection = True
                         post_wakeword()
                         gpio.set_mode("wakeword")
 
@@ -105,15 +108,14 @@ def listen_for_wakeword():
                             porcupine.delete()
                             porcupine = None
                         mic_lock.release()
-
                         time.sleep(1.5)
-                        
+
                         text_to_voice("네?")
                         user_text = upload_stt()
 
                         if user_text:
                             post_intent(FE_USER_ID)
-
+                            
                         gpio.set_mode("default") 
                         return user_text
 
@@ -158,13 +160,15 @@ def listen_for_wakeword():
                 porcupine.delete()
             except:
                 pass
-
-
+    
 
 def wakeWord_forever():
     while True:
         gpio.set_mode("default")  
         result_text = listen_for_wakeword()
+        
+        global_state.wakeword_detection = False
+        
         if result_text:
             return result_text
         print("\n'살가이' 감지 실패, 재시도 중...")

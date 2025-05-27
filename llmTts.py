@@ -6,15 +6,30 @@ import requests
 
 from config import BASE_URL, DUMMY_ID, DUMMY_PATH, LLM_VOICE_PATH, WAV_PATH
 from global_state import mic_lock
+import global_state
 from gpio_controller import GPIOController
 from util import load_speaker_device
 
 gpio = GPIOController(refresh_callback=lambda: None)
 
+def wakeword_interrupt(result, expect_text,params=None):
+    
+    if params and params.get("responsetype") == "intent":
+        return None
+    
+    if global_state.wakeword_detection:
+        print("웨이크워드 감지로 중단")
+        return result if expect_text else bool(result)
+    return None
+    
 # 공통 LLM 응답 처리 함수
 def send_audio_and_get_response(audio_path, url, params, expect_text=True, play_audio=True):
     result = {}
-
+    
+    interrupted = wakeword_interrupt(result, expect_text,params)
+    if interrupted is not None:
+        return interrupted
+    
     if not os.path.exists(audio_path) or os.path.getsize(audio_path) < 1000:
         print(f"오디오 파일이 존재하지 않거나 너무 작습니다: {audio_path}")
         gpio.set_mode("error")
@@ -26,6 +41,10 @@ def send_audio_and_get_response(audio_path, url, params, expect_text=True, play_
     try:
         response = requests.post(url, files=files, params=params)
         
+        interrupted = wakeword_interrupt(result, expect_text,params)
+        if interrupted is not None:
+            return interrupted
+        
         if response.status_code == 200:
             result = response.json()
             text = result.get("message", "")
@@ -36,6 +55,11 @@ def send_audio_and_get_response(audio_path, url, params, expect_text=True, play_
 
             if play_audio and audio_url:
                 audio_data = requests.get(audio_url)
+                
+                interrupted = wakeword_interrupt(result, expect_text,params)
+                if interrupted is not None:
+                    return interrupted
+                
                 if audio_data.status_code == 200:
                     with open(LLM_VOICE_PATH, "wb") as f:
                         f.write(audio_data.content)
@@ -48,6 +72,10 @@ def send_audio_and_get_response(audio_path, url, params, expect_text=True, play_
                     print(f"LLM : {text}")
                     gpio.set_mode("llmtts")
 
+                    interrupted = wakeword_interrupt(result, expect_text,params)
+                    if interrupted is not None:
+                        return interrupted
+                    
                     speaker_device = load_speaker_device()
                     proc = subprocess.run(
                         ["mpg123", "-o", "alsa", "-a", speaker_device, LLM_VOICE_PATH],

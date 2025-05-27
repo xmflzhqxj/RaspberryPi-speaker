@@ -59,7 +59,7 @@ def medicine_alert(sched_dt: datetime, dosage_mg, schedule_id):
         "confirmation_started_at": 0,
         "steps": deque([
             {"offset": -MEAL_TIME, "responsetype": "check_meal", "message": f"{USER_NAME}님 약 드시기 {MEAL_TIME}분 전입니다. 약 드시기 전에 식사 하셨나요?"},
-            {"offset": -INDUCE_TIME, "responsetype": "induce_medicine", "message": f"{USER_NAME}님 요 며칠 약 챙겨드시기 어려우셨죠?"},
+            # {"offset": -INDUCE_TIME, "responsetype": "induce_medicine", "message": f"{USER_NAME}님 요 며칠 약 챙겨드시기 어려우셨죠?"},
             {"offset": 0, "responsetype": "taking_medicine_time"},
             {"offset": DOSAGE_TIME, "responsetype": "check_medicine", "message": f"{USER_NAME}님 약 {dosage_mg}mg 드셨나요 ?"},
         ])
