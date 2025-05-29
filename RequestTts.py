@@ -5,7 +5,7 @@ from config import BASE_URL
 from gpio_controller import GPIOController
 from util import safe_play
 
-gpio = GPIOController(refresh_callback=lambda: None)
+gpio = GPIOController(refresh_callback=lambda: None, skip_callback=lambda: None)
 
 # TTS 수행 함수
 def text_to_voice(text):

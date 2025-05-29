@@ -26,7 +26,10 @@ from RequestStt import upload_stt
 from RequestTts import text_to_voice
 from util import auto_save_mic, auto_save_speaker, wait_for_microphone
 
-gpio = GPIOController(refresh_callback=lambda: on_button_press())
+gpio = GPIOController(
+    refresh_callback=lambda: on_button_schedule(),
+    skip_callback=lambda: on_button_skip()
+    )
 atexit.register(gpio.cleanup)
 
 scheduled_times_set = set()
@@ -67,6 +70,48 @@ def medicine_alert(sched_dt: datetime, dosage_mg, schedule_id):
     pending_alerts.append(alert)
     print(f"복약 응답 대기중... 현재 {len(pending_alerts)}건")
 
+# 스텝 처리
+def process_step(alert, step):
+    try:
+        if step["responsetype"] == "taking_medicine_time":
+            post_taking_medicine(DUMMY_ID, FE_USER_ID)
+            alert["wait_for_confirmation"] = True
+            alert["confirmation_started_at"] = datetime.now()
+            return
+
+        print(step["message"])
+        text_to_voice(step["message"])
+
+        user_response = upload_stt()
+        if user_response:
+            result = conversation_and_check(
+                responsetype=step["responsetype"],
+                schedule_id=alert["schedule_id"],
+                user_id=FE_USER_ID
+            )
+            if step["responsetype"] == "check_medicine":
+                if result:
+                    handle_medicine_confirmation(alert)
+                else:
+                    alert["retry_count"] += 1
+                    if alert["retry_count"] < DOSAGE_COUNT:
+                        print(f"복약 실패 → {DOSAGE_TIME}분 후 재시도 예정 ({alert['retry_count']}/{DOSAGE_COUNT})")
+                        alert["sched_dt"] = datetime.now()
+                        alert["steps"].appendleft({
+                            "offset": DOSAGE_TIME,
+                            "responsetype": "check_medicine",
+                            "message": f"{USER_NAME}님 약 {alert['dosage_mg']}mg 드셨나요 ?"
+                        })
+                    else:
+                        print("최대 복약 재시도 초과로 알림 제거")
+                        pending_alerts.remove(alert)
+        else:
+            text_to_voice("음성 인식에 실패했습니다.")
+            gpio.set_mode("error")
+    except Exception as e:
+        gpio.set_mode("error")
+        print(f"스텝 처리 중 오류: {e}")
+
 def process_immediate_alert():
     now = datetime.now()
     
@@ -83,47 +128,7 @@ def process_immediate_alert():
 
         if now >= target_time:
             alert["steps"].popleft()
-            try:
-                if step["responsetype"] == "taking_medicine_time":
-                    post_taking_medicine(DUMMY_ID, FE_USER_ID)
-                    alert["wait_for_confirmation"] = True
-                    alert["confirmation_started_at"] = datetime.now()
-                    return  
-                
-                print(step["message"])
-                text_to_voice(step["message"])
-                
-                user_response = upload_stt()
-
-                if user_response:
-                    result = conversation_and_check(
-                        responsetype=step["responsetype"],
-                        schedule_id=alert["schedule_id"],
-                        user_id=FE_USER_ID
-                    )
-                    if step["responsetype"] == "check_medicine":
-                        if result:
-                            handle_medicine_confirmation(alert)
-                        else:
-                            alert["retry_count"] += 1
-                            if alert["retry_count"] < DOSAGE_COUNT:
-                                print(f"복약 실패 → {DOSAGE_TIME}분 후 재시도 예정 ({alert['retry_count']}/{DOSAGE_COUNT})")
-                                alert["sched_dt"] = datetime.now()
-                                alert["steps"].appendleft({
-                                    "offset": DOSAGE_TIME,
-                                    "responsetype": "check_medicine",
-                                    "message": f"{USER_NAME}님 약 {alert['dosage_mg']}mg 드셨나요 ?"
-                                })
-                            else:
-                                print("최대 복약 재시도 초과로 알림 제거")
-                                pending_alerts.remove(alert)
-                else:
-                    text_to_voice("음성 인식에 실패했습니다.")
-                    gpio.set_mode("error")
-            except Exception as e:
-                gpio.set_mode("error")
-                print(f"스텝 처리 중 오류: {e}")
-
+            process_step(alert, step)
                 
 def input_loop():
     while True:
@@ -201,15 +206,39 @@ def refresh_schedules_now():
 
     register_schedule(schedule_list)
 
-def on_button_press():
-    refresh_schedules_now()
+def on_button_schedule():
+    refresh_schedules_now() # 새로고침
     now = datetime.now()
+
     for alert in list(pending_alerts):
-        if alert.get("wait_for_confirmation"):
+        if not alert["steps"]:
+            continue
+
+        if alert.get("wait_for_confirmation"): # 복약 처리 
             elapsed = (now - alert["confirmation_started_at"]).total_seconds() / 60
             if elapsed <= MAX_CONFIRMATION_WAIT:
-                handle_medicine_confirmation(alert)  
+                print("복약 확인 처리")
+                handle_medicine_confirmation(alert)
                 return
+
+def on_button_skip() : # 시간 당기기
+    for alert in list(pending_alerts):
+        if not alert["steps"]:
+            continue
+        
+        step = alert["steps"][0]
+
+        if step["responsetype"] == "taking_medicine_time": 
+            print("복약 시각 강제 실행")
+            alert["steps"].popleft()
+            process_step(alert, step)
+            return
+
+        if step["responsetype"] == "check_medicine":
+            print("복약 확인 강제 실행")
+            alert["steps"].popleft()
+            process_step(alert, step)
+            return
 
 def run_scheduler():
     schedule_list = get_today_schedule()

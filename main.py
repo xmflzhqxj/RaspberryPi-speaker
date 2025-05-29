@@ -14,7 +14,7 @@ from util import (
 )
 from WakeWord import wakeWord_forever
 
-gpio = GPIOController(refresh_callback=lambda: None)
+gpio = GPIOController(refresh_callback=lambda: None, skip_callback=lambda: None)
 atexit.register(gpio.cleanup)
 
 if __name__ == "__main__":

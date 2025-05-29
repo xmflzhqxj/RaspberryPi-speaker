@@ -11,7 +11,7 @@ from global_state import mic_lock
 from gpio_controller import GPIOController
 from util import load_hw_device
 
-gpio = GPIOController(refresh_callback=lambda: None)
+gpio = GPIOController(refresh_callback=lambda: None, skip_callback=lambda: None)
 
 SILENCE_THRESHOLD = 1600  
 SILENCE_DURATION = 3

@@ -6,16 +6,16 @@ import pyaudio
 import requests
 from scipy.signal import resample
 
+import global_state
 from config import BASE_URL, DOSAGE_TIME, FE_USER_ID
 from global_state import mic_lock
-import global_state
 from gpio_controller import GPIOController
 from llmTts import post_intent
 from RequestStt import upload_stt
 from RequestTts import text_to_voice
 from util import load_mic_index, suppress_alsa_errors
 
-gpio = GPIOController(refresh_callback=lambda: None)
+gpio = GPIOController(refresh_callback=lambda: None, skip_callback=lambda: None)
 
 KEYWORD_PATH = "/home/pi/my_project/salgai_ko_raspberry-pi_v3_0_0.ppn"
 MODEL_PATH = "/home/pi/my_project/porcupine_params_ko.pv"

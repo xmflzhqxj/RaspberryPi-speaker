@@ -25,11 +25,13 @@ RED_LED = 17
 BLUE_LED = 27
 GREEN_LED = 22
 SCEDULE_SWITCH = 23
-RESET_SWITCH = 24
+SKIP_SWITCH = 24
+RESET_SWITCH = 25
 
 class GPIOController:
-    def __init__(self, refresh_callback):
+    def __init__(self, refresh_callback, skip_callback):
         self.refresh_callback = refresh_callback
+        self.skip_callback = skip_callback
         self.initialized = False
         self.last_reset_time = 0  
         self.initialized = self._setup_gpio() 
@@ -44,6 +46,7 @@ class GPIOController:
             GPIO.setup(GREEN_LED, GPIO.OUT)
             GPIO.setup(SCEDULE_SWITCH, GPIO.IN, pull_up_down=GPIO.PUD_UP)
             GPIO.setup(RESET_SWITCH, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+            GPIO.setup(SKIP_SWITCH, GPIO.IN, pull_up_down=GPIO.PUD_UP)
             self.set_mode("default")
             return True
         except Exception as e:
@@ -58,6 +61,10 @@ class GPIOController:
                         self.refresh_callback()
                         time.sleep(1)
 
+                    if GPIO.input(SKIP_SWITCH) == GPIO.LOW:
+                        self.skip_callback()
+                        time.sleep(1)
+                    
                     if GPIO.input(RESET_SWITCH) == GPIO.LOW:
                         now = time.time()
                         if now - self.last_reset_time > 5:

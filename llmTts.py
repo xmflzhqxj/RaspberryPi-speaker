@@ -4,13 +4,13 @@ import time
 
 import requests
 
+import global_state
 from config import BASE_URL, DUMMY_ID, DUMMY_PATH, LLM_VOICE_PATH, WAV_PATH
 from global_state import mic_lock
-import global_state
 from gpio_controller import GPIOController
 from util import load_speaker_device
 
-gpio = GPIOController(refresh_callback=lambda: None)
+gpio = GPIOController(refresh_callback=lambda: None, skip_callback=lambda: None)
 
 def wakeword_interrupt(result, expect_text,params=None):
     
