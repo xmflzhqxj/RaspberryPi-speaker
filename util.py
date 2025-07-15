@@ -32,27 +32,7 @@ def safe_play(audio_segment):
     except Exception as e:
         print(f"에러 {e}")
 
-#llm 전 복용함을 알리는 command
-TAKEN_PATTERNS = [
-    r"먹(었|었어요|었습니다|었어)",
-    r"복용(했|했어요|했습니다)",
-    r"\b(응|네)\b",
-]
-
-
-@contextlib.contextmanager
-def suppress_alsa_errors():
-    try:
-        sys.stderr.flush()
-        devnull = os.open(os.devnull, os.O_WRONLY)
-        original_stderr_fd = os.dup(2)
-        os.dup2(devnull, 2)
-        yield
-    finally:
-        os.dup2(original_stderr_fd, 2)
-        os.close(original_stderr_fd)
-        os.close(devnull)
-
+# 마이크 찾는 함수
 def auto_save_mic():
     pa = pyaudio.PyAudio()
     selected_index = None
@@ -85,6 +65,7 @@ def auto_save_mic():
     else:
         print("사용 가능한 마이크를 찾지 못했습니다.")
 
+# 찾은 마이크의 인덱스 정보 저장 함수
 def save_mic_index(index):
     os.makedirs(os.path.dirname(MIC_CONFIG_PATH), exist_ok=True)
     pa = pyaudio.PyAudio()
@@ -118,6 +99,16 @@ def save_mic_index(index):
         json.dump({"mic_index": index, "hw_device": hw_device}, f)
     print(f"마이크 설정 저장 완료: index={index}, device={hw_device}")
 
+# 마이크 정보 불러오는 함수
+def load_mic_index():
+    if os.path.exists(MIC_CONFIG_PATH):
+        with open(MIC_CONFIG_PATH, "r") as f:
+            config = json.load(f)
+            return config.get("mic_index", None)
+    return None
+
+
+# 스피커 정보 저장 함수
 def auto_save_speaker():
     result = subprocess.run(['aplay', '-l'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     lines = result.stdout.splitlines()
@@ -141,13 +132,7 @@ def auto_save_speaker():
         json.dump({"speaker_device": speaker_hw}, f)
     print(f"스피커 설정 저장 완료: device={speaker_hw}")
 
-def load_hw_device():
-    if os.path.exists(MIC_CONFIG_PATH):
-        with open(MIC_CONFIG_PATH, "r") as f:
-            config = json.load(f)
-            return config.get("hw_device", "hw:0,0")
-    return "hw:0,0"
-
+# 스피커 정보 불러오는 함수
 def load_speaker_device():
     if os.path.exists(SPEAKER_CONFIG_PATH):
         with open(SPEAKER_CONFIG_PATH, "r") as f:
@@ -157,159 +142,16 @@ def load_speaker_device():
 
 import threading
 
-
-#코드 실행 중 스피커/마이크 바꿀 경우
-def device_monitor_thread(interval=5):
-    last_mic = None
-    last_speaker = None
-
-    while True:
-        try:
-            # 현재 연결된 마이크/스피커 상태 읽기
-            result_mic = subprocess.run(['arecord', '-l'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            result_speaker = subprocess.run(['aplay', '-l'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-
-            mic_devices = result_mic.stdout.strip()
-            speaker_devices = result_speaker.stdout.strip()
-
-            if mic_devices != last_mic:
-                print("마이크 장치 목록 변경됨. 재설정합니다.")
-                auto_save_mic()
-                last_mic = mic_devices
-
-            if speaker_devices != last_speaker:
-                print("스피커 장치 목록 변경됨. 재설정합니다.")
-                auto_save_speaker()
-                last_speaker = speaker_devices
-
-        except Exception as e:
-            print(f"장치 감시 중 오류 발생: {e}")
-
-        time.sleep(interval)
-
-def load_mic_index():
+def load_hw_device():
     if os.path.exists(MIC_CONFIG_PATH):
         with open(MIC_CONFIG_PATH, "r") as f:
             config = json.load(f)
-            return config.get("mic_index", None)
-    return None
-
-
-def wait_for_microphone(timeout=30):
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            pa = pyaudio.PyAudio()
-            count = pa.get_device_count()
-            for i in range(count):
-                dev = pa.get_device_info_by_index(i)
-                if dev.get('maxInputChannels', 0) > 0:
-                    pa.terminate()
-                    print("마이크 감지 완료")
-                    return True
-            pa.terminate()
-        except Exception as e:
-            print(f"마이크 확인 실패: {e}")
-        time.sleep(2)
-    print("마이크 연결 실패")
-    return False
-
-def wait_for_network(timeout=30):
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            response = requests.get("http://3.34.179.85:8000", timeout=5)
-            return True
-        except Exception as e:
-            print(f"재시도중... 에러: {e}")
-            time.sleep(2)
-    print("서버 연결 실패")
-    return False
-
-
-def device_monitor_thread(interval=10):
-    from util import auto_save_mic, auto_save_speaker
-
-    def monitor():
-        while True:
-            print("마이크/스피커 다시 감지 중...")
-            auto_save_mic()
-            auto_save_speaker()
-            time.sleep(interval)
-
-    t = threading.Thread(target=monitor, daemon=True)
-    t.start()
-
-korean_number_map = {
-    "영": 0, "한": 1, "두": 2, "세": 3, "네": 4, "다섯": 5,
-    "여섯": 6, "일곱": 7, "여덟": 8, "아홉": 9, "열": 10, "백": 100, "천": 1000
-}
-
-def parse_korean_number(text):
-    text = text.replace(" ", "").replace('"', '').replace('번', '').replace('입니다', '')
+            return config.get("hw_device", "hw:0,0")
+    return "hw:0,0"
     
-    if text in korean_number_map:
-        return korean_number_map[text], text  # 숫자와 원래 한글 동시 반환
-    elif "십" in text:
-        parts = text.split("십")
-        left = korean_number_map.get(parts[0], 1)
-        right = korean_number_map.get(parts[1], 0) if len(parts) > 1 else 0
-        return left * 10 + right, text
-    else:
-        return None, None
-
-time_unit_map = {
-    "초": 1 / 60,
-    "분": 1,
-    "시간": 60
-}
-
-
-def listen_number(word, default_value=0, time_count = ""):
-    from RequestStt import upload_stt
-    from RequestTts import text_to_voice
-
-    retry_count = 0
-    unit = '분' if time_count == 'time' else '번' if time_count == 'count' else ''
-    text_to_voice(f"{word}{unit}를 말씀해주세요.")
-
-    while retry_count < 3:
-        stt_result = upload_stt()
-        if stt_result:
-            stt_result = stt_result.strip()
-
-            if "기본" in stt_result:
-                text_to_voice("기본값을 사용합니다.")
-                return default_value
-
-            multiplier = 1
-            for t_unit, mul in time_unit_map.items():
-                if t_unit in stt_result and time_count == "time":
-                    multiplier = mul
-                    break
-
-            numbers = re.findall(r'\d+', stt_result)
-            if numbers:
-                value = int(numbers[0])
-                converted = round(value * multiplier)
-                text_to_voice(f"{word} {converted}{unit} 입니다.")
-                return converted
-
-            value = parse_korean_number(stt_result)
-            if value[0] is not None:
-                num_value, original_text = value
-                converted = round(num_value * multiplier)
-                text_to_voice(f"{word} {converted}{unit} 입니다.")
-                return converted
-
-        retry_count += 1
-        text_to_voice("잘 이해하지 못했어요. 다시 말씀해주세요.")
-
-    text_to_voice(f"3회 실패. {word} {default_value}{unit}로 설정합니다.")
-    return default_value
-
 CONFIG_PATH = "/home/pi/my_project/config.py" 
 
+# 사용자 정보 저장 함수
 def save_config(user_id, dosage_time, dosage_count, meal_time, induce_time):
     content = f"""# 서버 기본 주소
 BASE_URL = "http://3.34.179.85:8000"
@@ -329,15 +171,4 @@ DUMMY_ID = -1
 """
     with open(CONFIG_PATH, "w") as f:
         f.write(content)
-
-def initialize_settings():
-    print("▶ 초기 설정을 음성으로 입력해주세요:")
-
-    user_id = listen_number(word = "사용자 ID", default_value=1,time_count = "count")
-    dosage_time = listen_number(word = "복약 실패 후 재알림 간격", default_value=5, time_count = "time")
-    dosage_count = listen_number(word = "복약 실패 최대 재시도 횟수", default_value=3, time_count = "count")
-    meal_time = listen_number(word = "복약 전 식사 체크 시간", default_value=10, time_count = "time")
-    induce_time = listen_number(word = "복약 유도 시간", default_value=5, time_count = "time")
-
-    save_config(user_id, dosage_time, dosage_count, meal_time, induce_time)
     
