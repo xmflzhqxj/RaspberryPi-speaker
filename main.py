@@ -1,7 +1,7 @@
 import atexit
 import threading
 import time
-
+ 
 from gpio_controller import GPIOController
 from MedicineSchedule import handle_command, run_scheduler
 from RequestTts import text_to_voice
