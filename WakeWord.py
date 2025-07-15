@@ -1,7 +1,7 @@
 import time
 
-import numpy as np
-import pvporcupine
+import numpy as np 
+import pvporcupine # wakeword 감지를 위한 라이브러리
 import pyaudio
 import requests
 from scipy.signal import resample
@@ -17,12 +17,12 @@ from util import load_mic_index, suppress_alsa_errors
 
 gpio = GPIOController(refresh_callback=lambda: None, skip_callback=lambda: None)
 
-KEYWORD_PATH = "/home/pi/my_project/salgai_ko_raspberry-pi_v3_0_0.ppn"
-MODEL_PATH = "/home/pi/my_project/porcupine_params_ko.pv"
+KEYWORD_PATH = "웨이크워드 파일명"
+MODEL_PATH = "언어모델 파일명"
 MAX_CONFIRMATION_WAIT = DOSAGE_TIME
 
-
-def post_wakeword():
+# wakeword 감지를 알려주는 함수
+def post_wakeword(): 
     url = f"{BASE_URL}/api/wake"
     params = {"user_id": FE_USER_ID}
 
@@ -40,7 +40,7 @@ def post_wakeword():
         gpio.set_mode("error")
         return False
 
-
+# wakeword를 감지하는 함수
 def listen_for_wakeword():
     porcupine = None
     pa = None
@@ -50,7 +50,7 @@ def listen_for_wakeword():
     try:
         with suppress_alsa_errors():
             porcupine = pvporcupine.create(
-                access_key="ni04jcIMpIiFP81v3fdVRyfmtPwUM6t6fKm7/1UXnW8IdpQ+AsZcbw==",
+                access_key="개인키",
                 keyword_paths=[KEYWORD_PATH],
                 model_path=MODEL_PATH
             )
@@ -62,11 +62,12 @@ def listen_for_wakeword():
                 return None
 
             pa = pyaudio.PyAudio()
-            input_frame_length = int(porcupine.frame_length * 44100 / 16000)
+            input_frame_length = int(porcupine.frame_length * 44100 / 16000) # 웨이크워드의 frequency에 맞게 변환
 
-            print("waiting wakeword 살가이...")
+            print("waiting wakeword...") 
 
             while True:
+                # 마이크 중복 방지
                 if not mic_lock.acquire(timeout=0.1):
                     time.sleep(0.2)
                     continue
@@ -90,13 +91,14 @@ def listen_for_wakeword():
                         continue
 
                     result = porcupine.process(pcm_16000)
-
+    
                     if result >= 0:
                         print("wakeword 살가이가 감지되었습니다.")
                         global_state.wakeword_detection = True
                         post_wakeword()
                         gpio.set_mode("wakeword")
 
+                        # 자원 충돌 방지
                         if stream:
                             stream.stop_stream()
                             stream.close()
@@ -111,10 +113,10 @@ def listen_for_wakeword():
                         time.sleep(1.5)
 
                         text_to_voice("네?")
-                        user_text = upload_stt()
+                        user_text = upload_stt() # 사용자 음성 녹음
 
                         if user_text:
-                            post_intent(FE_USER_ID)
+                            post_intent(FE_USER_ID) # 의도 파악 함수 실행
                             
                         gpio.set_mode("default") 
                         return user_text
@@ -142,6 +144,7 @@ def listen_for_wakeword():
         time.sleep(2)
         gpio.set_mode("default")
 
+    # 마이크 자원 반드시 해제
     finally:
         if stream:
             try:
@@ -162,6 +165,7 @@ def listen_for_wakeword():
                 pass
     
 
+# 웨이크 워드 인식 함수 무한 루프
 def wakeWord_forever():
     while True:
         gpio.set_mode("default")  
