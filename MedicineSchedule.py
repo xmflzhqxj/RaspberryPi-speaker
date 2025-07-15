@@ -19,23 +19,21 @@ from config import (
     MEAL_TIME,
     USER_ID,
 )
-from global_state import pending_alerts
+from global_state import pending_alerts # 정해진 루틴이 있으므로 Queue 설정
 from gpio_controller import GPIOController
 from llmTts import conversation_and_check, post_taking_medicine
 from RequestStt import upload_stt
 from RequestTts import text_to_voice
 from util import auto_save_mic, auto_save_speaker, wait_for_microphone
 
-gpio = GPIOController(
-    refresh_callback=lambda: on_button_schedule(),
-    skip_callback=lambda: on_button_skip()
-    )
+gpio = GPIOController(refresh_callback=lambda: on_button_schedule())
 atexit.register(gpio.cleanup)
 
-scheduled_times_set = set()
+scheduled_times_set = set() 
 ALARM_TOLERANCE_MINUTES = 1
 MAX_CONFIRMATION_WAIT = DOSAGE_TIME 
 
+# 사용자 이름 가져오는 함수
 def get_user_name(user_id):
     try:
         res = requests.get(f"{BASE_URL}/api/users")
@@ -51,6 +49,7 @@ def get_user_name(user_id):
 
 USER_NAME = get_user_name(USER_ID)
 
+# 복약 정보 함수
 def medicine_alert(sched_dt: datetime, dosage_mg, schedule_id):
     alert = {
         "schedule_id": schedule_id,
@@ -73,7 +72,7 @@ def medicine_alert(sched_dt: datetime, dosage_mg, schedule_id):
 # 스텝 처리
 def process_step(alert, step):
     try:
-        if step["responsetype"] == "taking_medicine_time":
+        if step["responsetype"] == "taking_medicine_time": # 복약시간 
             post_taking_medicine(DUMMY_ID, FE_USER_ID)
             alert["wait_for_confirmation"] = True
             alert["confirmation_started_at"] = datetime.now()
@@ -82,19 +81,19 @@ def process_step(alert, step):
         print(step["message"])
         text_to_voice(step["message"])
 
-        user_response = upload_stt()
+        user_response = upload_stt() # 사용자 음성 녹음
         if user_response:
             result = conversation_and_check(
                 responsetype=step["responsetype"],
                 schedule_id=alert["schedule_id"],
                 user_id=FE_USER_ID
             )
-            if step["responsetype"] == "check_medicine":
+            if step["responsetype"] == "check_medicine": # 복약여부 재체크
                 if result:
                     handle_medicine_confirmation(alert)
                 else:
                     alert["retry_count"] += 1
-                    if alert["retry_count"] < DOSAGE_COUNT:
+                    if alert["retry_count"] < DOSAGE_COUNT: # 재알림
                         print(f"복약 실패 → {DOSAGE_TIME}분 후 재시도 예정 ({alert['retry_count']}/{DOSAGE_COUNT})")
                         alert["sched_dt"] = datetime.now()
                         alert["steps"].appendleft({
@@ -112,6 +111,7 @@ def process_step(alert, step):
         gpio.set_mode("error")
         print(f"스텝 처리 중 오류: {e}")
 
+# 복약 시간 처리 함수
 def process_immediate_alert():
     now = datetime.now()
     
@@ -122,19 +122,21 @@ def process_immediate_alert():
         step = alert["steps"][0]
         target_time = alert["sched_dt"] + timedelta(minutes=step["offset"])
 
-        if now > target_time + timedelta(minutes=ALARM_TOLERANCE_MINUTES):
+        if now > target_time + timedelta(minutes=ALARM_TOLERANCE_MINUTES): # 시간이 지나면 큐에서 해당 알람 제거
             alert["steps"].popleft()
             continue
 
         if now >= target_time:
             alert["steps"].popleft()
             process_step(alert, step)
-                
+
+# 알람 무한루프 함수
 def input_loop():
     while True:
         process_immediate_alert()
         time.sleep(0.5)
 
+# 당일 복약 스케줄 가져오는 함수
 def get_today_schedule():
     url = f"{BASE_URL}/api/user/histories?user_id={USER_ID}"
     today_schedule = []
@@ -162,6 +164,7 @@ def get_today_schedule():
         gpio.set_mode("error")
         return []
 
+# 스케줄 등록 함수
 def register_schedule(schedule_list):
     now = datetime.now().replace(second=0, microsecond=0)
     schedule_list.sort(key=lambda r: datetime.fromisoformat(r["scheduled_time"]))
@@ -177,6 +180,7 @@ def register_schedule(schedule_list):
 
     process_immediate_alert()
 
+# 복약알람 자정 새로고침 함수
 def daily_refresh():
     def refresh_loop():
         while True:
@@ -190,8 +194,9 @@ def daily_refresh():
             schedule_list = get_today_schedule()
             register_schedule(schedule_list)
 
-    threading.Thread(target=refresh_loop, daemon=True).start()
+    threading.Thread(target=refresh_loop, daemon=True).start() # 새로운 thread로 자정 판단 동시 진행
 
+# 복약 새로고침 함수 
 def refresh_schedules_now():
     text_to_voice(f"스케줄 새로고침")
     schedule_list = get_today_schedule()
@@ -206,6 +211,7 @@ def refresh_schedules_now():
 
     register_schedule(schedule_list)
 
+# 버튼 누를 때 작동하는 함수 
 def on_button_schedule():
     refresh_schedules_now() # 새로고침
     now = datetime.now()
@@ -221,25 +227,7 @@ def on_button_schedule():
                 handle_medicine_confirmation(alert)
                 return
 
-def on_button_skip() : # 시간 당기기
-    for alert in list(pending_alerts):
-        if not alert["steps"]:
-            continue
-        
-        step = alert["steps"][0]
-
-        if step["responsetype"] == "taking_medicine_time": 
-            print("복약 시각 강제 실행")
-            alert["steps"].popleft()
-            process_step(alert, step)
-            return
-
-        if step["responsetype"] == "check_medicine":
-            print("복약 확인 강제 실행")
-            alert["steps"].popleft()
-            process_step(alert, step)
-            return
-
+# 오늘 복약 스케줄 함수 
 def run_scheduler():
     schedule_list = get_today_schedule()
     if schedule_list:
@@ -257,6 +245,7 @@ def run_scheduler():
     while True:
         time.sleep(60)
 
+# 복약 기록 전송 함수 
 def handle_medicine_confirmation(alert):
     taken_at = datetime.now().strftime("%y.%m.%d.%H.%M")
     payload = {"schedule_id": alert["schedule_id"], "taken_at": taken_at}
@@ -271,59 +260,6 @@ def handle_medicine_confirmation(alert):
     except Exception as e:
         print(f"전송 에러: {e}")
         gpio.set_mode("error")
-
-def get_next_medicine_info():
-    schedule_list = get_today_schedule()
-    now = datetime.now()
-    for record in sorted(schedule_list, key=lambda r: r["scheduled_time"]):
-        sched_time = datetime.fromisoformat(record["scheduled_time"])
-        if sched_time > now:
-            time_str = sched_time.strftime("%p %I시 %M분").replace("AM", "오전").replace("PM", "오후")
-            dosage_mg = record["dosage_mg"]
-            return f"{USER_NAME}님의 다음 약은 {time_str}에 {dosage_mg}밀리그램 만큼 드셔야 합니다."
-    return "오늘 남은 약이 없습니다."
-
-def get_today_schedule_summary():
-    schedule_list = get_today_schedule()
-    if not schedule_list:
-        return f"{USER_NAME}님의 오늘 복약 스케줄이 없습니다."
-    summary = f"{USER_NAME}님의 오늘 복약 스케줄은 다음과 같습니다."
-    for r in sorted(schedule_list, key=lambda r: r["scheduled_time"]):
-        sched_time = datetime.fromisoformat(r["scheduled_time"])
-        time_str = sched_time.strftime("%p %I시 %M분").replace("AM", "오전").replace("PM", "오후")
-        summary += f" {time_str}에 {r['dosage_mg']}밀리그램,"
-    return summary.strip(" ,")
-
-def handle_command(text):
-    for cmd in command_patterns:
-        if re.search(cmd["pattern"], text):
-            if cmd["responsetype"] == "next_medicine":
-                return get_next_medicine_info()
-            elif cmd["responsetype"] == "today_schedule":
-                return get_today_schedule_summary()  
-
-# from WakeWord import wakeWord_once
-
-# def wakeword_medicine_check(alert):
-#     max_wait = MAX_CONFIRMATION_WAIT * 60  # seconds
-#     start_time = time.time()
-
-#     while mic_lock.locked():
-#         print("마이크 점유 중 → wakeword 대기")
-#         time.sleep(0.5)
-
-#     while time.time() - start_time < max_wait:
-#         result_text = wakeWord_once() # 이때만 wake word 켜기
-#         if result_text:
-#             is_taken = conversation_and_check(
-#                 responsetype="check_medicine",
-#                 schedule_id=alert["schedule_id"],
-#                 user_id=USER_ID
-#             )
-#             if is_taken:
-#                 handle_medicine_confirmation(alert)
-#                 break
-#         time.sleep(1)
 
 if __name__ == "__main__":
     if wait_for_microphone():
