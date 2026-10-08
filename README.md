@@ -206,6 +206,7 @@ python3 main.py
 ```
 
 ---
+<<<<<<< HEAD
 
 ## 📊 개발 과정 (주차별 요약)
 
@@ -437,21 +438,4 @@ schedule==1.2.0         # 작업 스케줄
 
 ---
 
-## 👥 기여 및 연락
-
-**개발자**: KDH  
-**개발 기간**: 15주  
-**라이센스**: MIT  
-
-- **버그 리포트**: [GitHub Issues](https://github.com/xmflzhqxj/RaspberryPi-speaker/issues)
-- **Pull Request**: 환영합니다!
-
----
-
-<div align="center">
-
-**🌟 도움이 되었다면 스타를 눌러주세요!**
-
-Made with ❤️ by KDH
-
-</div>
+=======
